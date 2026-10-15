@@ -21,28 +21,30 @@ export default function MuroEvento() {
   const [archivos, setArchivos] = useState([]);
   const [subiendo, setSubiendo] = useState(false);
 
-  // --- ESTADOS DE LA CÁMARA WEB ---
+  // --- ESTADOS DE CÁMARA Y GRABACIÓN ---
   const [camaraActiva, setCamaraActiva] = useState(false);
   const [grabando, setGrabando] = useState(false);
-  const [progresoGrabacion, setProgresoGrabacion] = useState(0); // 0 a 100 (barra que se quema)
-  
+  const [progresoGrabacion, setProgresoGrabacion] = useState(0); 
   const videoRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
   const pressTimer = useRef(null);
   const maxDuracionTimer = useRef(null);
   const intervalProgressRef = useRef(null);
-
-  // SEGUROS DE CONTROL
   const isPressing = useRef(false);
   const grabandoRef = useRef(false);
   const capturandoRef = useRef(false);
 
-  // --- NUEVOS ESTADOS DE VISTA PREVIA Y CONFIRMACIÓN ---
-  const [vistaPrevia, setVistaPrevia] = useState(null); // { blob, url, tipo }
+  // --- ESTADOS DE VISTA PREVIA ---
+  const [vistaPrevia, setVistaPrevia] = useState(null);
   const [comentario, setComentario] = useState('');
 
-  // 1. Cargar datos del álbum
+  // --- NUEVOS ESTADOS: VISORES DE GALERÍA Y HISTORIAS ---
+  const [historiasVistas, setHistoriasVistas] = useState([]);
+  const [historiaActivaIndex, setHistoriaActivaIndex] = useState(null);
+  const [fotoActivaIndex, setFotoActivaIndex] = useState(null);
+
+  // 1. Cargar datos del álbum y las historias vistas en este celular
   useEffect(() => {
     if (!albumId) return;
     const cargarDatos = async () => {
@@ -57,9 +59,15 @@ export default function MuroEvento() {
       }
     };
     cargarDatos();
+
+    // Recuperar del celular qué historias ya se vieron
+    const vistasGuardadas = localStorage.getItem('historiasVistas_\${albumId}');
+    if (vistasGuardadas) {
+      setHistoriasVistas(JSON.parse(vistasGuardadas));
+    }
   }, [albumId]);
 
-  // 2. Escuchar fotos y videos en tiempo real (con filtrado)
+  // 2. Escuchar fotos y videos
   useEffect(() => {
     if (!albumId) return;
     const q = query(collection(db, 'albums', albumId, 'fotos'), orderBy('creadoEn', 'desc'));
@@ -70,40 +78,69 @@ export default function MuroEvento() {
     return () => unsubscribe();
   }, [albumId]);
 
-  // FILTRADO ESTRICTO DE 5 DÍAS
+  // 3. FILTRADO (5 Días máximo)
+  const getTime = (item) => item.creadoEn?.toMillis ? item.creadoEn.toMillis() : (item.creadoEn ? new Date(item.creadoEn).getTime() : 0);
+
   const archivosValidos = archivos.filter(a => {
     const hace5Dias = Date.now() - 5 * 24 * 60 * 60 * 1000;
-    const creado = a.creadoEn?.toMillis 
-      ? a.creadoEn.toMillis() 
-      : (a.creadoEn ? new Date(a.creadoEn).getTime() : Date.now());
-    
-    return creado > hace5Dias; // Se borra / oculta pasados los 5 días
+    return getTime(a) > hace5Dias;
   });
 
-  // Historias (Videos < 24hs)
+  const fotosGrid = archivosValidos.filter(a => a.tipo === 'imagen');
+  
   const historias = archivosValidos.filter(a => {
     if (a.tipo !== 'video') return false;
     const hace24Horas = Date.now() - 24 * 60 * 60 * 1000;
-    const creado = a.creadoEn?.toMillis ? a.creadoEn.toMillis() : (a.creadoEn ? new Date(a.creadoEn).getTime() : Date.now());
-    return creado > hace24Horas;
+    return getTime(a) > hace24Horas;
   });
 
-  // Muro (Imágenes < 5 días)
-  const fotosGrid = archivosValidos.filter(a => a.tipo === 'imagen');
+  // 4. ORDENAR HISTORIAS (Nuevas primero, Vistas al fondo)
+  const historiasOrdenadas = [...historias].sort((a, b) => {
+    const aVisto = historiasVistas.includes(a.id);
+    const bVisto = historiasVistas.includes(b.id);
+    if (aVisto === bVisto) return getTime(b) - getTime(a);
+    return aVisto ? 1 : -1;
+  });
 
-  // --- FUNCIONES DE CÁMARA ---
+  // --- LÓGICA DEL VISOR DE HISTORIAS ---
+  const abrirHistoria = (index) => {
+    const id = historiasOrdenadas[index].id;
+    if (!historiasVistas.includes(id)) {
+      const nuevasVistas = [...historiasVistas, id];
+      setHistoriasVistas(nuevasVistas);
+      localStorage.setItem('historiasVistas_\${albumId}', JSON.stringify(nuevasVistas));
+    }
+    setHistoriaActivaIndex(index);
+  };
+
+  const avanzarHistoria = () => {
+    if (historiaActivaIndex !== null && historiaActivaIndex < historiasOrdenadas.length - 1) {
+      abrirHistoria(historiaActivaIndex + 1);
+    } else {
+      setHistoriaActivaIndex(null); // Cierra si era la última
+    }
+  };
+
+  const retrocederHistoria = () => {
+    if (historiaActivaIndex !== null && historiaActivaIndex > 0) {
+      abrirHistoria(historiaActivaIndex - 1);
+    }
+  };
+
+  // --- LÓGICA DEL VISOR DE FOTOS ---
+  const abrirFoto = (index) => setFotoActivaIndex(index);
+  const cerrarFoto = () => setFotoActivaIndex(null);
+  const avanzarFoto = (e) => { e.stopPropagation(); if (fotoActivaIndex < fotosGrid.length - 1) setFotoActivaIndex(fotoActivaIndex + 1); };
+  const retrocederFoto = (e) => { e.stopPropagation(); if (fotoActivaIndex > 0) setFotoActivaIndex(fotoActivaIndex - 1); };
+
+  // --- FUNCIONES DE CÁMARA (Sin cambios) ---
   const iniciarCamara = async () => {
     setVistaPrevia(null);
     setComentario('');
     setCamaraActiva(true);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' },
-        audio: true
-      });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: true });
+      if (videoRef.current) videoRef.current.srcObject = stream;
     } catch (err) {
       console.error(err);
       alert("Necesitas dar permiso de cámara y micrófono.");
@@ -127,37 +164,22 @@ export default function MuroEvento() {
   const handlePointerDown = (e) => {
     e.preventDefault();
     if (capturandoRef.current || isPressing.current) return;
-    
     isPressing.current = true;
     chunksRef.current = [];
-    
-    pressTimer.current = setTimeout(() => {
-      if (isPressing.current) {
-        iniciarGrabacionVideo();
-      }
-    }, 450);
+    pressTimer.current = setTimeout(() => { if (isPressing.current) iniciarGrabacionVideo(); }, 450);
   };
 
   const handlePointerUp = (e) => {
     e.preventDefault();
     if (!isPressing.current) return;
     isPressing.current = false;
-
     if (pressTimer.current) clearTimeout(pressTimer.current);
-
-    if (grabandoRef.current) {
-      detenerGrabacionVideo();
-    } else {
-      if (!capturandoRef.current) {
-        capturandoRef.current = true;
-        tomarFoto();
-      }
-    }
+    if (grabandoRef.current) detenerGrabacionVideo();
+    else if (!capturandoRef.current) { capturandoRef.current = true; tomarFoto(); }
   };
 
   const iniciarGrabacionVideo = () => {
     if (!videoRef.current || !videoRef.current.srcObject || capturandoRef.current) return;
-    
     setGrabando(true);
     grabandoRef.current = true;
     capturandoRef.current = true;
@@ -165,42 +187,23 @@ export default function MuroEvento() {
 
     const stream = videoRef.current.srcObject;
     let options = { mimeType: 'video/webm' };
-    if (!MediaRecorder.isTypeSupported('video/webm')) {
-      options = { mimeType: 'video/mp4' };
-    }
+    if (!MediaRecorder.isTypeSupported('video/webm')) options = { mimeType: 'video/mp4' };
 
     try {
       const mediaRecorder = new MediaRecorder(stream, options);
       mediaRecorderRef.current = mediaRecorder;
-      mediaRecorder.ondataavailable = e => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
-      };
-      mediaRecorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: options.mimeType });
-        guardarEnVistaPrevia(blob, 'video');
-      };
+      mediaRecorder.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      mediaRecorder.onstop = () => guardarEnVistaPrevia(new Blob(chunksRef.current, { type: options.mimeType }), 'video');
 
-      // Control del Indicador de Historia (Rayita que se consume)
       let tiempoActual = 0;
-      const limiteMs = 15000;
-      const intervaloMs = 100;
-      
       intervalProgressRef.current = setInterval(() => {
-        tiempoActual += intervaloMs;
-        const porcentaje = Math.min((tiempoActual / limiteMs) * 100, 100);
-        setProgresoGrabacion(porcentaje);
-      }, intervaloMs);
+        tiempoActual += 100;
+        setProgresoGrabacion(Math.min((tiempoActual / 15000) * 100, 100));
+      }, 100);
 
       mediaRecorder.start();
-
-      maxDuracionTimer.current = setTimeout(() => {
-        if (grabandoRef.current) {
-          detenerGrabacionVideo();
-        }
-      }, limiteMs);
-
+      maxDuracionTimer.current = setTimeout(() => { if (grabandoRef.current) detenerGrabacionVideo(); }, 15000);
     } catch(e) {
-      console.error(e);
       setGrabando(false);
       grabandoRef.current = false;
       capturandoRef.current = false;
@@ -208,9 +211,7 @@ export default function MuroEvento() {
   };
 
   const detenerGrabacionVideo = () => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-      mediaRecorderRef.current.stop();
-    }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') mediaRecorderRef.current.stop();
     setGrabando(false);
     grabandoRef.current = false;
     if (maxDuracionTimer.current) clearTimeout(maxDuracionTimer.current);
@@ -222,25 +223,17 @@ export default function MuroEvento() {
     const canvas = document.createElement('canvas');
     canvas.width = videoRef.current.videoWidth;
     canvas.height = videoRef.current.videoHeight;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-    
-    canvas.toBlob(blob => {
-      guardarEnVistaPrevia(blob, 'imagen');
-    }, 'image/jpeg', 0.85);
+    canvas.getContext('2d').drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob(blob => guardarEnVistaPrevia(blob, 'imagen'), 'image/jpeg', 0.85);
   };
 
-  // En lugar de procesar directo, lo mandamos a Vista Previa
   const guardarEnVistaPrevia = (blob, tipo) => {
-    const url = URL.createObjectURL(blob);
-    setVistaPrevia({ blob, url, tipo });
-    detenerCamara(); // Apagamos el hardware de la cámara
+    setVistaPrevia({ blob, url: URL.createObjectURL(blob), tipo });
+    detenerCamara();
   };
 
   const descartarCaptura = () => {
-    if (vistaPrevia?.url) {
-      URL.revokeObjectURL(vistaPrevia.url); // Liberar memoria
-    }
+    if (vistaPrevia?.url) URL.revokeObjectURL(vistaPrevia.url);
     setVistaPrevia(null);
     setComentario('');
   };
@@ -249,132 +242,125 @@ export default function MuroEvento() {
     if (!vistaPrevia) return;
     setSubiendo(true);
     const { blob, tipo } = vistaPrevia;
-
     try {
-      const extension = tipo === 'video' ? 'mp4' : 'jpg';
-      const nombreArchivo = \`\${Date.now()}-\${Math.random().toString(36).substring(2)}.\${extension}\`;
-      const ruta = storageRef(storage, \`eventos/\${albumId}/\${nombreArchivo}\`);
-      
+      const ruta = storageRef(storage, \`eventos/\${albumId}/\${Date.now()}.\${tipo === 'video' ? 'mp4' : 'jpg'}\`);
       await uploadBytes(ruta, blob);
       const urlDescarga = await getDownloadURL(ruta);
-
       await addDoc(collection(db, 'albums', albumId, 'fotos'), {
-        url: urlDescarga,
-        tipo: tipo,
-        comentario: tipo === 'imagen' ? comentario.trim() : '', // Solo la foto guarda comentario
-        creadoEn: new Date(),
-        subidoPor: usuario ? usuario.uid : 'anonimo'
+        url: urlDescarga, tipo, comentario: tipo === 'imagen' ? comentario.trim() : '', creadoEn: new Date(), subidoPor: usuario ? usuario.uid : 'anonimo'
       });
-
       descartarCaptura();
-    } catch (error) {
-      console.error(error);
-      alert("Error al subir.");
-    } finally {
-      setSubiendo(false);
-    }
+    } catch (error) { alert("Error al subir."); } finally { setSubiendo(false); }
   };
 
-  const esAdmin = usuario && album && usuario.uid === album.adminId;
-  if (cargando) return <div className="min-h-screen bg-[#f8f9fa] flex items-center justify-center font-sans">Cargando...</div>;
+  if (cargando) return <div className="min-h-screen flex items-center justify-center font-sans">Cargando...</div>;
   if (!album) return null;
 
   return (
     <div className="min-h-screen bg-[#f8f9fa] flex flex-col font-sans overflow-hidden relative">
       
-      {/* --- CÁMARA ESTILO INSTAGRAM --- */}
-      {camaraActiva && (
-        <div className="fixed inset-0 bg-black z-50 flex flex-col">
-          {/* Indicador superior (barra que se quema) */}
-          {grabando && (
-            <div className="absolute top-0 left-0 w-full h-1.5 bg-white/20 z-50">
-              <div 
-                className="h-full bg-red-600 rounded-r-md transition-all ease-linear"
-                style={{ width: \`\${progresoGrabacion}%\` }}
-              ></div>
+      {/* --- VISOR DE HISTORIAS A PANTALLA COMPLETA --- */}
+      {historiaActivaIndex !== null && (
+        <div className="fixed inset-0 bg-black z-[100] flex flex-col">
+          {/* Barra superior de progreso de historias */}
+          <div className="absolute top-0 w-full p-4 pt-6 flex flex-col gap-3 z-[110] bg-gradient-to-b from-black/80 to-transparent">
+            <div className="flex gap-1 w-full">
+              {historiasOrdenadas.map((_, i) => (
+                <div key={i} className="h-1 flex-1 bg-white/30 rounded-full overflow-hidden">
+                  <div className={\`h-full \${i === historiaActivaIndex ? 'bg-white' : i < historiaActivaIndex ? 'bg-white' : ''}\`}></div>
+                </div>
+              ))}
             </div>
-          )}
+            <div className="flex justify-between items-center px-1">
+              <span className="text-white text-xs font-bold tracking-widest uppercase">Historia</span>
+              <button onClick={() => setHistoriaActivaIndex(null)} className="text-white text-3xl font-light leading-none">×</button>
+            </div>
+          </div>
 
-          <div className="absolute top-4 w-full p-6 flex justify-between items-center z-50">
-            <button onClick={detenerCamara} className="text-white text-4xl font-light hover:text-gray-300">×</button>
-            {grabando && (
-              <div className="bg-red-600 px-3 py-1 rounded-full text-white text-[10px] font-bold animate-pulse flex items-center gap-1.5 shadow-lg">
-                <span className="w-1.5 h-1.5 bg-white rounded-full"></span> HISTORIA (MAX 15S)
+          <video 
+            src={historiasOrdenadas[historiaActivaIndex].url} 
+            autoPlay 
+            playsInline 
+            onEnded={avanzarHistoria}
+            className="w-full h-full object-cover"
+          />
+
+          {/* Botones invisibles para tocar izquierda/derecha */}
+          <div className="absolute inset-y-0 left-0 w-1/3 z-[100]" onClick={retrocederHistoria}></div>
+          <div className="absolute inset-y-0 right-0 w-2/3 z-[100]" onClick={avanzarHistoria}></div>
+        </div>
+      )}
+
+      {/* --- VISOR DE FOTOGRAFÍAS A PANTALLA COMPLETA --- */}
+      {fotoActivaIndex !== null && (
+        <div className="fixed inset-0 bg-black/95 z-[100] flex flex-col items-center justify-center backdrop-blur-sm">
+          <button onClick={cerrarFoto} className="absolute top-6 right-6 text-white text-4xl font-light z-[110] w-12 h-12 flex items-center justify-center bg-black/20 rounded-full">×</button>
+          
+          <div className="relative w-full h-full flex items-center justify-center">
+            <img src={fotosGrid[fotoActivaIndex].url} className="max-w-full max-h-full object-contain" alt="Visor" />
+            
+            {fotoActivaIndex > 0 && (
+              <button onClick={retrocederFoto} className="absolute left-4 text-white text-4xl bg-black/40 rounded-full w-12 h-12 flex items-center justify-center pb-2 z-[110] hover:bg-black/60">‹</button>
+            )}
+            {fotoActivaIndex < fotosGrid.length - 1 && (
+              <button onClick={avanzarFoto} className="absolute right-4 text-white text-4xl bg-black/40 rounded-full w-12 h-12 flex items-center justify-center pb-2 z-[110] hover:bg-black/60">›</button>
+            )}
+
+            {fotosGrid[fotoActivaIndex].comentario && (
+              <div className="absolute bottom-0 left-0 w-full p-8 pt-20 bg-gradient-to-t from-black via-black/80 to-transparent">
+                <p className="text-white text-center leading-relaxed font-light text-lg">
+                  {fotosGrid[fotoActivaIndex].comentario}
+                </p>
               </div>
             )}
           </div>
-          
+        </div>
+      )}
+
+      {/* --- CÁMARA --- */}
+      {camaraActiva && (
+        <div className="fixed inset-0 bg-black z-50 flex flex-col">
+          {grabando && (
+            <div className="absolute top-0 left-0 w-full h-1.5 bg-white/20 z-50">
+              <div className="h-full bg-red-600 rounded-r-md transition-all ease-linear" style={{ width: \`\${progresoGrabacion}%\` }}></div>
+            </div>
+          )}
+          <div className="absolute top-4 w-full p-6 flex justify-between items-center z-50">
+            <button onClick={detenerCamara} className="text-white text-4xl font-light">×</button>
+            {grabando && <div className="bg-red-600 px-3 py-1 rounded-full text-white text-[10px] font-bold animate-pulse flex items-center gap-1.5"><span className="w-1.5 h-1.5 bg-white rounded-full"></span> HISTORIA (MAX 15S)</div>}
+          </div>
           <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover bg-gray-900" />
-          
           <div className="absolute bottom-12 w-full flex flex-col items-center justify-center z-50">
-            <p className="text-white text-[10px] opacity-75 mb-4 tracking-[0.25em] font-bold uppercase drop-shadow-md">
-              Toque: Foto • Mantener: Historia
-            </p>
-            <button
-              onPointerDown={handlePointerDown}
-              onPointerUp={handlePointerUp}
-              onPointerLeave={handlePointerUp}
-              onContextMenu={(e) => e.preventDefault()}
-              style={{ touchAction: 'none' }}
-              className={\`w-20 h-20 rounded-full border-4 flex items-center justify-center transition-all duration-300 \${grabando ? 'border-red-500 scale-110' : 'border-white'}\`}
-            >
+            <p className="text-white text-[10px] opacity-75 mb-4 tracking-[0.25em] font-bold uppercase drop-shadow-md">Toque: Foto • Mantener: Historia</p>
+            <button onPointerDown={handlePointerDown} onPointerUp={handlePointerUp} onPointerLeave={handlePointerUp} onContextMenu={(e) => e.preventDefault()} style={{ touchAction: 'none' }} className={\`w-20 h-20 rounded-full border-4 flex items-center justify-center transition-all duration-300 \${grabando ? 'border-red-500 scale-110' : 'border-white'}\`}>
               <div className={\`bg-white transition-all duration-300 \${grabando ? 'w-8 h-8 rounded bg-red-500' : 'w-16 h-16 rounded-full'}\`}></div>
             </button>
           </div>
         </div>
       )}
 
-      {/* --- PANTALLA DE VISTA PREVIA Y CONFIRMACIÓN --- */}
+      {/* --- VISTA PREVIA --- */}
       {vistaPrevia && (
-        <div className="fixed inset-0 bg-black z-50 flex flex-col justify-between p-6">
-          
-          {/* Contenido Capturado */}
+        <div className="fixed inset-0 bg-black z-[80] flex flex-col justify-between p-6">
           <div className="flex-1 w-full flex items-center justify-center rounded-3xl overflow-hidden relative bg-zinc-900 shadow-2xl">
-            {vistaPrevia.tipo === 'video' ? (
-              <video src={vistaPrevia.url} autoPlay loop playsInline className="w-full h-full object-cover" />
-            ) : (
-              <img src={vistaPrevia.url} alt="Previa" className="w-full h-full object-cover" />
-            )}
-            
-            {/* Overlay para foto (comentario) */}
+            {vistaPrevia.tipo === 'video' ? <video src={vistaPrevia.url} autoPlay loop playsInline className="w-full h-full object-cover" /> : <img src={vistaPrevia.url} className="w-full h-full object-cover" />}
             {vistaPrevia.tipo === 'imagen' && (
               <div className="absolute bottom-0 left-0 w-full p-6 bg-gradient-to-t from-black/80 via-black/40 to-transparent">
-                <input
-                  type="text"
-                  placeholder="Escribe un comentario..."
-                  value={comentario}
-                  onChange={(e) => setComentario(e.target.value)}
-                  className="w-full bg-white/20 hover:bg-white/30 focus:bg-white/40 text-white placeholder-white/70 font-medium px-5 py-4 rounded-2xl outline-none border border-white/25 backdrop-blur-md transition-all text-sm"
-                />
+                <input type="text" placeholder="Escribe un comentario..." value={comentario} onChange={(e) => setComentario(e.target.value)} className="w-full bg-white/20 text-white placeholder-white/70 font-medium px-5 py-4 rounded-2xl outline-none border border-white/25 backdrop-blur-md transition-all text-sm" />
               </div>
             )}
           </div>
-
-          {/* Botonera inferior */}
           <div className="flex justify-between gap-4 mt-6">
-            <button
-              onClick={descartarCaptura}
-              disabled={subiendo}
-              className="flex-1 py-4.5 bg-zinc-800 text-white font-bold rounded-2xl hover:bg-zinc-700 transition"
-            >
-              Cancelar
-            </button>
-            <button
-              onClick={confirmarYSubir}
-              disabled={subiendo}
-              className={\`flex-1 py-4.5 bg-blue-600 text-white font-bold rounded-2xl hover:bg-blue-700 transition flex items-center justify-center gap-2 \${subiendo ? 'opacity-60' : ''}\`}
-            >
-              {subiendo ? 'Guardando...' : 'Confirmar y subir'}
-            </button>
+            <button onClick={descartarCaptura} disabled={subiendo} className="flex-1 py-4.5 bg-zinc-800 text-white font-bold rounded-2xl">Cancelar</button>
+            <button onClick={confirmarYSubir} disabled={subiendo} className={\`flex-1 py-4.5 bg-blue-600 text-white font-bold rounded-2xl \${subiendo ? 'opacity-60' : ''}\`}>{subiendo ? 'Guardando...' : 'Confirmar y subir'}</button>
           </div>
-
         </div>
       )}
 
-      {/* --- CABECERA Y HISTORIAS --- */}
+      {/* --- CABECERA (Historias) --- */}
       <header className="bg-white pt-4 pb-5 shadow-sm sticky top-0 z-10 rounded-b-[2rem] flex flex-col">
         <div className="flex items-center justify-between px-6">
-          <button onClick={() => router.push('/')} className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-50 text-gray-600 hover:bg-gray-100">←</button>
+          <button onClick={() => router.push('/')} className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-50 text-gray-600">←</button>
           <div className="flex flex-col items-center flex-1 px-2 overflow-hidden">
             <h1 className="text-xl font-serif text-black truncate w-full text-center">{album.nombreEvento}</h1>
             <p className="text-[10px] text-gray-400 uppercase tracking-widest mt-1 font-medium">{album.fechaEvento}</p>
@@ -382,58 +368,44 @@ export default function MuroEvento() {
           <button onClick={() => setMenuAbierto(true)} className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-50 text-gray-600 pb-2 text-2xl">⋮</button>
         </div>
 
-        {/* Carrusel de Historias Reales - Desaparecen tras 24hs o 5 días del evento */}
-        {historias.length > 0 && (
+        {historiasOrdenadas.length > 0 && (
           <div className="flex gap-3 overflow-x-auto mt-6 px-6 pb-2 [&::-webkit-scrollbar]:hidden">
-            {historias.map(historia => (
-              <div key={historia.id} className="flex-shrink-0 relative rounded-[16px] p-[2px] bg-blue-500 animate-fade-in">
-                <div className="w-14 h-20 bg-black rounded-[14px] overflow-hidden border-[2px] border-white relative flex items-center justify-center">
-                  <video src={historia.url} className="w-full h-full object-cover opacity-80" playsInline muted />
-                  <span className="absolute text-white text-xs">▶</span>
-                </div>
-              </div>
-            ))}
+            {historiasOrdenadas.map((historia, index) => {
+              const visto = historiasVistas.includes(historia.id);
+              return (
+                <button key={historia.id} onClick={() => abrirHistoria(index)} className={\`flex-shrink-0 relative rounded-[16px] p-[2px] transition-all transform hover:scale-95 \${visto ? 'bg-gray-300' : 'bg-blue-500'}\`}>
+                  <div className="w-14 h-20 bg-black rounded-[14px] overflow-hidden border-[2px] border-white relative flex items-center justify-center">
+                    <video src={historia.url} className={\`w-full h-full object-cover transition-opacity duration-300 \${visto ? 'opacity-50' : 'opacity-80'}\`} />
+                    {!visto && <span className="absolute bottom-1 bg-black/60 text-white px-1.5 py-0.5 rounded text-[8px] font-bold tracking-widest">NUEVO</span>}
+                  </div>
+                </button>
+              );
+            })}
           </div>
         )}
       </header>
 
-      {/* --- MURO DE FOTOS (Cuadrícula) --- */}
+      {/* --- MURO (Fotos) --- */}
       <main className="flex-1 p-6 overflow-y-auto pb-32">
         {fotosGrid.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-center text-gray-400 mt-10">
-            <div className="text-6xl mb-4 opacity-30">📷</div>
-            <p className="text-sm font-medium">Aún no hay fotos.</p>
-          </div>
+          <div className="h-full flex flex-col items-center justify-center text-center text-gray-400 mt-10"><div className="text-6xl mb-4 opacity-30">📷</div><p className="text-sm font-medium">Aún no hay fotos.</p></div>
         ) : (
           <div className="grid grid-cols-2 gap-4 auto-rows-fr">
-            {fotosGrid.map((foto) => (
-              <div key={foto.id} className="flex flex-col relative rounded-2xl overflow-hidden bg-white border border-gray-100 shadow-sm transition-all pb-3">
+            {fotosGrid.map((foto, index) => (
+              <button key={foto.id} onClick={() => abrirFoto(index)} className="flex flex-col relative rounded-2xl overflow-hidden bg-white border border-gray-100 shadow-sm transition-all pb-3 text-left hover:shadow-md hover:-translate-y-0.5">
                 <div className="relative aspect-square w-full overflow-hidden bg-gray-200">
                   <img src={foto.url} className="w-full h-full object-cover" loading="lazy" />
                 </div>
-                {/* Comentario si existe */}
-                {foto.comentario && (
-                  <p className="text-xs text-gray-600 px-3 mt-2 line-clamp-2 leading-relaxed italic font-sans font-light">
-                    "{foto.comentario}"
-                  </p>
-                )}
-              </div>
+                {foto.comentario && <p className="text-xs text-gray-600 px-3 mt-2 line-clamp-2 leading-relaxed italic font-sans font-light">"{foto.comentario}"</p>}
+              </button>
             ))}
           </div>
         )}
       </main>
 
-      {/* --- BOTÓN FLOTANTE --- */}
       <div className="fixed bottom-10 w-full flex justify-center z-20 pointer-events-none">
-        <button 
-          onClick={iniciarCamara}
-          disabled={subiendo}
-          className={\`pointer-events-auto bg-blue-600 text-white w-16 h-16 rounded-full shadow-[0_10px_25px_rgba(37,99,235,0.4)] flex items-center justify-center text-4xl pb-1 hover:bg-blue-700 transition transform \${subiendo ? 'opacity-50 scale-95' : 'hover:-translate-y-1'}\`}
-        >
-          {subiendo ? <span className="text-lg">⏳</span> : '+'}
-        </button>
+        <button onClick={iniciarCamara} disabled={subiendo} className={\`pointer-events-auto bg-blue-600 text-white w-16 h-16 rounded-full shadow-[0_10px_25px_rgba(37,99,235,0.4)] flex items-center justify-center text-4xl pb-1 hover:bg-blue-700 transition transform \${subiendo ? 'opacity-50 scale-95' : 'hover:-translate-y-1'}\`}>{subiendo ? <span className="text-lg">⏳</span> : '+'}</button>
       </div>
-
     </div>
   );
 }
@@ -441,10 +413,10 @@ export default function MuroEvento() {
 
 fs.writeFileSync(path.join(__dirname, 'src/pages/[albumId]/index.js'), muroCode.trim());
 
-console.log("✅ Implementado: Confirmación, Comentarios en Fotos, Barra de Progreso e Inactividad a 5 días. Subiendo a GitHub...");
+console.log("✅ Implementado: Visores de Pantalla Completa y Estado de Visualización. Subiendo a GitHub...");
 try {
-  execSync('git add . && git commit -m "Confirmaciones de subida, barra de progreso de 15s y filtro de caducidad de 5 dias" && git push origin main', { stdio: 'inherit' });
-  console.log("🚀 ¡Actualización completada! Esperando procesamiento de Vercel.");
+  execSync('git add . && git commit -m "Agregado visor de historias con progresion y galeria interactiva de fotos" && git push origin main', { stdio: 'inherit' });
+  console.log("🚀 ¡Actualización completada! Espera que Vercel termine el despliegue.");
 } catch (err) {
   console.error("Error subiendo a GitHub:", err);
 }
