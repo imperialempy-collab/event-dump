@@ -19,10 +19,17 @@ export default function MuroEvento() {
   // --- ESTADOS DE LA CÁMARA WEB ---
   const [camaraActiva, setCamaraActiva] = useState(false);
   const [grabando, setGrabando] = useState(false);
+  
   const videoRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
   const pressTimer = useRef(null);
+  const maxDuracionTimer = useRef(null);
+
+  // SEGUROS DE CONTROL (Evitan doble disparos y mezcla de estados)
+  const isPressing = useRef(false);
+  const grabandoRef = useRef(false); // Para leer al instante sin retrasos de React
+  const capturandoRef = useRef(false); // Evita procesar foto y video a la vez
 
   // 1. Cargar datos del álbum
   useEffect(() => {
@@ -52,8 +59,21 @@ export default function MuroEvento() {
     return () => unsubscribe();
   }, [albumId]);
 
-  // Separar Historias (Videos) y Muro (Fotos)
-  const historias = archivos.filter(a => a.tipo === 'video');
+  // FILTRADO SEGURO
+  // Historias (Videos) -> Desaparecen automáticamente después de 24 horas ("Durar poco")
+  const historias = archivos.filter(a => {
+    if (a.tipo !== 'video') return false;
+    
+    // Filtro temporal: 24 horas
+    const hace24Horas = Date.now() - 24 * 60 * 60 * 1000;
+    const creado = a.creadoEn?.toMillis 
+      ? a.creadoEn.toMillis() 
+      : (a.creadoEn ? new Date(a.creadoEn).getTime() : Date.now());
+    
+    return creado > hace24Horas;
+  });
+
+  // Muro (Imágenes únicamente)
   const fotosGrid = archivos.filter(a => a.tipo === 'imagen');
 
   // --- FUNCIONES DE CÁMARA ESTILO INSTAGRAM ---
@@ -80,38 +100,57 @@ export default function MuroEvento() {
     }
     setCamaraActiva(false);
     setGrabando(false);
+    grabandoRef.current = false;
+    capturandoRef.current = false;
+    if (maxDuracionTimer.current) clearTimeout(maxDuracionTimer.current);
   };
 
-  // Lógica de Tocar (Foto) vs Mantener Presionado (Video)
-  const handlePointerDown = () => {
-    chunksRef.current = [];
-    // Si mantiene presionado por más de 400ms, empezamos a grabar
-    pressTimer.current = setTimeout(() => {
-      iniciarGrabacionVideo();
-    }, 400);
-  };
-
-  const handlePointerUp = () => {
-    if (pressTimer.current) clearTimeout(pressTimer.current);
+  // Manejador del toque inicial
+  const handlePointerDown = (e) => {
+    e.preventDefault();
+    if (capturandoRef.current || isPressing.current) return;
     
-    if (grabando) {
-      // Soltó el botón, detener grabación de video
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-        mediaRecorderRef.current.stop();
+    isPressing.current = true;
+    chunksRef.current = [];
+    
+    // Programamos el chequeo de "Mantener presionado"
+    pressTimer.current = setTimeout(() => {
+      if (isPressing.current) {
+        iniciarGrabacionVideo();
       }
-      setGrabando(false);
+    }, 450); // Presionado por casi medio segundo inicia historia (video)
+  };
+
+  // Manejador al levantar el dedo
+  const handlePointerUp = (e) => {
+    e.preventDefault();
+    if (!isPressing.current) return;
+    isPressing.current = false;
+
+    // Cancelar el chequeo del temporizador
+    if (pressTimer.current) clearTimeout(pressTimer.current);
+
+    if (grabandoRef.current) {
+      // Detener grabación de video de forma segura
+      detenerGrabacionVideo();
     } else {
-      // Fue un toque rápido, tomar foto
-      tomarFoto();
+      // Si no estaba grabando y el dedo se levantó rápido: TOMAR FOTO
+      if (!capturandoRef.current) {
+        capturandoRef.current = true;
+        tomarFoto();
+      }
     }
   };
 
   const iniciarGrabacionVideo = () => {
-    if (!videoRef.current || !videoRef.current.srcObject) return;
+    if (!videoRef.current || !videoRef.current.srcObject || capturandoRef.current) return;
+    
     setGrabando(true);
+    grabandoRef.current = true;
+    capturandoRef.current = true; // Bloquea cualquier intento de foto
+
     const stream = videoRef.current.srcObject;
     
-    // Buscar el formato compatible en el navegador del celular
     let options = { mimeType: 'video/webm' };
     if (!MediaRecorder.isTypeSupported('video/webm')) {
       options = { mimeType: 'video/mp4' };
@@ -123,13 +162,33 @@ export default function MuroEvento() {
       mediaRecorder.ondataavailable = e => {
         if (e.data.size > 0) chunksRef.current.push(e.data);
       };
-      mediaRecorder.onstop = () => procesarArchivo(new Blob(chunksRef.current, { type: options.mimeType }), 'video');
+      mediaRecorder.onstop = () => {
+        procesarArchivo(new Blob(chunksRef.current, { type: options.mimeType }), 'video');
+      };
       mediaRecorder.start();
+
+      // "HISTORIA DEBE DURAR POCO": Toque de límite de 15 segundos
+      maxDuracionTimer.current = setTimeout(() => {
+        if (grabandoRef.current) {
+          detenerGrabacionVideo();
+        }
+      }, 15000); // 15 segundos máximo
+
     } catch(e) {
       console.error(e);
-      alert("Tu navegador no soporta grabación de video.");
       setGrabando(false);
+      grabandoRef.current = false;
+      capturandoRef.current = false;
     }
+  };
+
+  const detenerGrabacionVideo = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      mediaRecorderRef.current.stop();
+    }
+    setGrabando(false);
+    grabandoRef.current = false;
+    if (maxDuracionTimer.current) clearTimeout(maxDuracionTimer.current);
   };
 
   const tomarFoto = () => {
@@ -180,33 +239,30 @@ export default function MuroEvento() {
       {/* --- CÁMARA ESTILO INSTAGRAM (Overlay a pantalla completa) --- */}
       {camaraActiva && (
         <div className="fixed inset-0 bg-black z-50 flex flex-col">
-          {/* Cabecera Cámara */}
           <div className="absolute top-0 w-full p-6 flex justify-between items-center z-50">
             <button onClick={detenerCamara} className="text-white text-4xl font-light hover:text-gray-300">×</button>
             {grabando && (
               <div className="bg-red-600 px-3 py-1 rounded-full text-white text-xs font-bold animate-pulse flex items-center gap-2 shadow-lg">
-                <span className="w-2 h-2 bg-white rounded-full"></span> GRABANDO
+                <span className="w-2 h-2 bg-white rounded-full"></span> HISTORIA (MAX 15S)
               </div>
             )}
           </div>
           
-          {/* Visor de Cámara */}
           <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover bg-gray-900" />
           
-          {/* Botón de Captura */}
           <div className="absolute bottom-12 w-full flex flex-col items-center justify-center z-50">
-            <p className="text-white text-xs opacity-70 mb-4 tracking-widest font-medium uppercase drop-shadow-md">
-              Toca para foto • Mantén para historia
+            <p className="text-white text-[10px] opacity-75 mb-4 tracking-[0.25em] font-bold uppercase drop-shadow-md">
+              Toque: Foto • Mantener: Historia
             </p>
             <button
               onPointerDown={handlePointerDown}
               onPointerUp={handlePointerUp}
               onPointerLeave={handlePointerUp}
-              onContextMenu={(e) => e.preventDefault()} // Evita menús raros al mantener presionado
-              style={{ touchAction: 'none' }} // Crucial para que el navegador no interfiera
+              onContextMenu={(e) => e.preventDefault()}
+              style={{ touchAction: 'none' }}
               className={`w-20 h-20 rounded-full border-4 flex items-center justify-center transition-all duration-300 ${grabando ? 'border-red-500 scale-110' : 'border-white'}`}
             >
-              <div className={`bg-white transition-all duration-300 ${grabando ? 'w-8 h-8 rounded-md bg-red-500' : 'w-16 h-16 rounded-full'}`}></div>
+              <div className={`bg-white transition-all duration-300 ${grabando ? 'w-8 h-8 rounded bg-red-500' : 'w-16 h-16 rounded-full'}`}></div>
             </button>
           </div>
         </div>
@@ -223,13 +279,13 @@ export default function MuroEvento() {
           <button onClick={() => setMenuAbierto(true)} className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-50 text-gray-600 pb-2 text-2xl">⋮</button>
         </div>
 
-        {/* Carrusel de Historias Reales (Videos) */}
+        {/* Carrusel de Historias Reales - Desaparecen tras 24hs ("Durar poco") */}
         {historias.length > 0 && (
           <div className="flex gap-3 overflow-x-auto mt-6 px-6 pb-2 [&::-webkit-scrollbar]:hidden">
             {historias.map(historia => (
               <div key={historia.id} className="flex-shrink-0 relative rounded-[16px] p-[2px] bg-blue-500">
                 <div className="w-14 h-20 bg-black rounded-[14px] overflow-hidden border-[2px] border-white relative flex items-center justify-center">
-                  <video src={historia.url} className="w-full h-full object-cover opacity-80" />
+                  <video src={historia.url} className="w-full h-full object-cover opacity-80" playsInline muted />
                   <span className="absolute text-white text-xs">▶</span>
                 </div>
               </div>
