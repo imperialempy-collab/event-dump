@@ -34,10 +34,13 @@ export default function MuroEvento() {
   const [vistaPrevia, setVistaPrevia] = useState(null);
   const [comentario, setComentario] = useState('');
 
-  // --- NUEVOS ESTADOS: VISORES DE GALERÍA Y HISTORIAS ---
+  // --- ESTADOS DE VISORES (FOTOS Y HISTORIAS) ---
   const [historiasVistas, setHistoriasVistas] = useState([]);
-  const [historiaActivaIndex, setHistoriaActivaIndex] = useState(null);
   const [fotoActivaIndex, setFotoActivaIndex] = useState(null);
+  
+  // Nuevo Cerebro del Visor de Historias (Congela el orden mientras se mira)
+  const [visorHistorias, setVisorHistorias] = useState(null); // { historias: [], currentIndex: 0 }
+  const [videoProgreso, setVideoProgreso] = useState(0); // 0 a 100 para la raya que se quema
 
   // 1. Cargar datos del álbum y las historias vistas en este celular
   useEffect(() => {
@@ -55,8 +58,7 @@ export default function MuroEvento() {
     };
     cargarDatos();
 
-    // Recuperar del celular qué historias ya se vieron
-    const vistasGuardadas = localStorage.getItem('historiasVistas_${albumId}');
+    const vistasGuardadas = localStorage.getItem('historiasVistas_' + albumId);
     if (vistasGuardadas) {
       setHistoriasVistas(JSON.parse(vistasGuardadas));
     }
@@ -89,36 +91,62 @@ export default function MuroEvento() {
     return getTime(a) > hace24Horas;
   });
 
-  // 4. ORDENAR HISTORIAS (Nuevas primero, Vistas al fondo)
+  // 4. ORDENAR HISTORIAS (Nuevas primero, Vistas al fondo ordenadas cronológicamente)
   const historiasOrdenadas = [...historias].sort((a, b) => {
     const aVisto = historiasVistas.includes(a.id);
     const bVisto = historiasVistas.includes(b.id);
-    if (aVisto === bVisto) return getTime(b) - getTime(a);
-    return aVisto ? 1 : -1;
+    if (aVisto === bVisto) return getTime(b) - getTime(a); // Novedad
+    return aVisto ? 1 : -1; // No vistas primero
   });
 
-  // --- LÓGICA DEL VISOR DE HISTORIAS ---
-  const abrirHistoria = (index) => {
-    const id = historiasOrdenadas[index].id;
+  // --- NUEVA LÓGICA DEL VISOR DE HISTORIAS ---
+  const marcarComoVista = (id) => {
     if (!historiasVistas.includes(id)) {
       const nuevasVistas = [...historiasVistas, id];
       setHistoriasVistas(nuevasVistas);
-      localStorage.setItem('historiasVistas_${albumId}', JSON.stringify(nuevasVistas));
+      localStorage.setItem('historiasVistas_' + albumId, JSON.stringify(nuevasVistas));
     }
-    setHistoriaActivaIndex(index);
+  };
+
+  const abrirHistoria = (index) => {
+    // Congelamos el orden actual para que no "salte" mientras miramos
+    setVisorHistorias({
+      lista: historiasOrdenadas,
+      currentIndex: index
+    });
+    setVideoProgreso(0);
+    marcarComoVista(historiasOrdenadas[index].id);
   };
 
   const avanzarHistoria = () => {
-    if (historiaActivaIndex !== null && historiaActivaIndex < historiasOrdenadas.length - 1) {
-      abrirHistoria(historiaActivaIndex + 1);
+    if (visorHistorias.currentIndex < visorHistorias.lista.length - 1) {
+      const nextIndex = visorHistorias.currentIndex + 1;
+      setVisorHistorias({ ...visorHistorias, currentIndex: nextIndex });
+      setVideoProgreso(0);
+      marcarComoVista(visorHistorias.lista[nextIndex].id);
     } else {
-      setHistoriaActivaIndex(null); // Cierra si era la última
+      cerrarVisorHistorias();
     }
   };
 
   const retrocederHistoria = () => {
-    if (historiaActivaIndex !== null && historiaActivaIndex > 0) {
-      abrirHistoria(historiaActivaIndex - 1);
+    if (visorHistorias.currentIndex > 0) {
+      const prevIndex = visorHistorias.currentIndex - 1;
+      setVisorHistorias({ ...visorHistorias, currentIndex: prevIndex });
+      setVideoProgreso(0);
+      marcarComoVista(visorHistorias.lista[prevIndex].id);
+    }
+  };
+
+  const cerrarVisorHistorias = () => {
+    setVisorHistorias(null);
+    setVideoProgreso(0);
+  };
+
+  const handleTimeUpdate = (e) => {
+    const { currentTime, duration } = e.target;
+    if (duration > 0) {
+      setVideoProgreso((currentTime / duration) * 100);
     }
   };
 
@@ -128,7 +156,7 @@ export default function MuroEvento() {
   const avanzarFoto = (e) => { e.stopPropagation(); if (fotoActivaIndex < fotosGrid.length - 1) setFotoActivaIndex(fotoActivaIndex + 1); };
   const retrocederFoto = (e) => { e.stopPropagation(); if (fotoActivaIndex > 0) setFotoActivaIndex(fotoActivaIndex - 1); };
 
-  // --- FUNCIONES DE CÁMARA (Sin cambios) ---
+  // --- FUNCIONES DE CÁMARA ---
   const iniciarCamara = async () => {
     setVistaPrevia(null);
     setComentario('');
@@ -255,28 +283,36 @@ export default function MuroEvento() {
     <div className="min-h-screen bg-[#f8f9fa] flex flex-col font-sans overflow-hidden relative">
       
       {/* --- VISOR DE HISTORIAS A PANTALLA COMPLETA --- */}
-      {historiaActivaIndex !== null && (
+      {visorHistorias !== null && (
         <div className="fixed inset-0 bg-black z-[100] flex flex-col">
-          {/* Barra superior de progreso de historias */}
-          <div className="absolute top-0 w-full p-4 pt-6 flex flex-col gap-3 z-[110] bg-gradient-to-b from-black/80 to-transparent">
+          {/* Barra superior de progreso */}
+          <div className="absolute top-0 w-full p-4 pt-6 flex flex-col gap-3 z-[110] bg-gradient-to-b from-black/80 to-transparent pointer-events-none">
             <div className="flex gap-1 w-full">
-              {historiasOrdenadas.map((_, i) => (
+              {visorHistorias.lista.map((_, i) => (
                 <div key={i} className="h-1 flex-1 bg-white/30 rounded-full overflow-hidden">
-                  <div className={`h-full ${i === historiaActivaIndex ? 'bg-white' : i < historiaActivaIndex ? 'bg-white' : ''}`}></div>
+                  <div 
+                    className="h-full bg-white transition-all duration-75 ease-linear"
+                    style={{
+                      width: i === visorHistorias.currentIndex 
+                        ? `${videoProgreso}%` 
+                        : i < visorHistorias.currentIndex ? '100%' : '0%'
+                    }}
+                  ></div>
                 </div>
               ))}
             </div>
-            <div className="flex justify-between items-center px-1">
-              <span className="text-white text-xs font-bold tracking-widest uppercase">Historia</span>
-              <button onClick={() => setHistoriaActivaIndex(null)} className="text-white text-3xl font-light leading-none">×</button>
+            <div className="flex justify-between items-center px-1 pointer-events-auto">
+              <span className="text-white text-xs font-bold tracking-widest uppercase shadow-black drop-shadow-md">Historia</span>
+              <button onClick={cerrarVisorHistorias} className="text-white text-3xl font-light leading-none shadow-black drop-shadow-md">×</button>
             </div>
           </div>
 
           <video 
-            src={historiasOrdenadas[historiaActivaIndex].url} 
+            src={visorHistorias.lista[visorHistorias.currentIndex].url} 
             autoPlay 
             playsInline 
             onEnded={avanzarHistoria}
+            onTimeUpdate={handleTimeUpdate}
             className="w-full h-full object-cover"
           />
 
@@ -312,7 +348,7 @@ export default function MuroEvento() {
         </div>
       )}
 
-      {/* --- CÁMARA --- */}
+      {/* --- CÁMARA Y VISTA PREVIA (Sin cambios) --- */}
       {camaraActiva && (
         <div className="fixed inset-0 bg-black z-50 flex flex-col">
           {grabando && (
@@ -334,7 +370,6 @@ export default function MuroEvento() {
         </div>
       )}
 
-      {/* --- VISTA PREVIA --- */}
       {vistaPrevia && (
         <div className="fixed inset-0 bg-black z-[80] flex flex-col justify-between p-6">
           <div className="flex-1 w-full flex items-center justify-center rounded-3xl overflow-hidden relative bg-zinc-900 shadow-2xl">
@@ -352,7 +387,7 @@ export default function MuroEvento() {
         </div>
       )}
 
-      {/* --- CABECERA (Historias) --- */}
+      {/* --- CABECERA Y CARRUSEL DE HISTORIAS --- */}
       <header className="bg-white pt-4 pb-5 shadow-sm sticky top-0 z-10 rounded-b-[2rem] flex flex-col">
         <div className="flex items-center justify-between px-6">
           <button onClick={() => router.push('/')} className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-50 text-gray-600">←</button>
