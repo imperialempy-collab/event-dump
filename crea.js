@@ -47,9 +47,10 @@ export default function MuroEvento() {
   const [swipeOffset, setSwipeOffset] = useState(0);
   const touchStartRef = useRef({ x: 0, y: 0 });
 
-  // --- NUEVO: ESTADOS DE VISOR DE MURO ---
+  // --- NUEVO: ESTADOS DE VISOR DE MURO (Carrusel) ---
   const [itemActivoIndex, setItemActivoIndex] = useState(null);
   const [muroSwipeOffset, setMuroSwipeOffset] = useState({ x: 0, y: 0 });
+  const [isSwipingMuro, setIsSwipingMuro] = useState(false);
   const muroTouchStartRef = useRef({ x: 0, y: 0 });
 
   useEffect(() => {
@@ -118,7 +119,6 @@ export default function MuroEvento() {
     setSwipeOffset(0);
     marcarComoVista(historiasOrdenadas[index].id);
   };
-
   const avanzarHistoria = (e) => {
     if (e) e.stopPropagation();
     if (visorHistorias.currentIndex < visorHistorias.lista.length - 1) {
@@ -126,11 +126,8 @@ export default function MuroEvento() {
       setVisorHistorias({ ...visorHistorias, currentIndex: nextIndex });
       setVideoProgreso(0);
       marcarComoVista(visorHistorias.lista[nextIndex].id);
-    } else {
-      cerrarVisorHistorias();
-    }
+    } else cerrarVisorHistorias();
   };
-
   const retrocederHistoria = (e) => {
     if (e) e.stopPropagation();
     if (visorHistorias.currentIndex > 0) {
@@ -140,29 +137,15 @@ export default function MuroEvento() {
       marcarComoVista(visorHistorias.lista[prevIndex].id);
     }
   };
-
-  const cerrarVisorHistorias = () => {
-    setVisorHistorias(null);
-    setVideoProgreso(0);
-    setSwipeOffset(0);
-  };
-
-  const handleTimeUpdate = (e) => {
-    const { currentTime, duration } = e.target;
-    if (duration > 0) setVideoProgreso((currentTime / duration) * 100);
-  };
-
-  const handleTouchStart = (e) => {
-    touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-    setSwipeOffset(0);
-  };
-
+  const cerrarVisorHistorias = () => { setVisorHistorias(null); setVideoProgreso(0); setSwipeOffset(0); };
+  const handleTimeUpdate = (e) => { const { currentTime, duration } = e.target; if (duration > 0) setVideoProgreso((currentTime / duration) * 100); };
+  
+  const handleTouchStart = (e) => { touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }; setSwipeOffset(0); };
   const handleTouchMove = (e) => {
     const diffY = e.touches[0].clientY - touchStartRef.current.y;
     const diffX = e.touches[0].clientX - touchStartRef.current.x;
     if (Math.abs(diffY) > Math.abs(diffX) && Math.abs(diffY) > 10) setSwipeOffset(diffY);
   };
-
   const handleTouchEnd = (e) => {
     const diffY = e.changedTouches[0].clientY - touchStartRef.current.y;
     const diffX = e.changedTouches[0].clientX - touchStartRef.current.x;
@@ -170,90 +153,66 @@ export default function MuroEvento() {
     else setSwipeOffset(0);
   };
 
-  // --- LÓGICA DEL VISOR DEL MURO (Ahora con gestos táctiles 360°) ---
-  const abrirItemMuro = (index) => {
-    setItemActivoIndex(index);
-    setMuroSwipeOffset({ x: 0, y: 0 });
-  };
-  
-  const cerrarItemMuro = () => {
-    setItemActivoIndex(null);
-    setMuroSwipeOffset({ x: 0, y: 0 });
-  };
-  
-  const avanzarItemMuro = (e) => { 
-    if(e) e.stopPropagation(); 
-    if (itemActivoIndex < itemsMuro.length - 1) setItemActivoIndex(itemActivoIndex + 1); 
-  };
-  
-  const retrocederItemMuro = (e) => { 
-    if(e) e.stopPropagation(); 
-    if (itemActivoIndex > 0) setItemActivoIndex(itemActivoIndex - 1); 
-  };
+  // --- LÓGICA DEL VISOR DEL MURO (CARRUSEL MÁGICO) ---
+  const abrirItemMuro = (index) => { setItemActivoIndex(index); setMuroSwipeOffset({ x: 0, y: 0 }); setIsSwipingMuro(false); };
+  const cerrarItemMuro = () => { setItemActivoIndex(null); setMuroSwipeOffset({ x: 0, y: 0 }); };
+  const avanzarItemMuro = (e) => { if(e) e.stopPropagation(); if (itemActivoIndex < itemsMuro.length - 1) setItemActivoIndex(itemActivoIndex + 1); };
+  const retrocederItemMuro = (e) => { if(e) e.stopPropagation(); if (itemActivoIndex > 0) setItemActivoIndex(itemActivoIndex - 1); };
 
   const handleMuroTouchStart = (e) => {
     muroTouchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    setIsSwipingMuro(true);
     setMuroSwipeOffset({ x: 0, y: 0 });
   };
 
   const handleMuroTouchMove = (e) => {
+    if (!isSwipingMuro) return;
     const diffY = e.touches[0].clientY - muroTouchStartRef.current.y;
     const diffX = e.touches[0].clientX - muroTouchStartRef.current.x;
     
-    // El sistema decide qué intención tiene el usuario basándose en el movimiento más largo
-    if (Math.abs(diffY) > Math.abs(diffX) && Math.abs(diffY) > 10) {
-      setMuroSwipeOffset({ x: 0, y: diffY }); // Cierre vertical
-    } else if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 10) {
-      setMuroSwipeOffset({ x: diffX, y: 0 }); // Navegación horizontal
+    // Bloqueo de eje: Si mueve más en X, es deslizar foto. Si mueve más en Y, es cerrar.
+    if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(muroSwipeOffset.y) < 10) {
+      // Navegación Horizontal (Carrusel) con Efecto Resorte en los extremos
+      let moveX = diffX;
+      if (itemActivoIndex === 0 && diffX > 0) moveX = diffX * 0.25; // Resorte inicio
+      if (itemActivoIndex === itemsMuro.length - 1 && diffX < 0) moveX = diffX * 0.25; // Resorte final
+      setMuroSwipeOffset({ x: moveX, y: 0 });
+    } else if (Math.abs(diffY) > Math.abs(diffX) && Math.abs(muroSwipeOffset.x) < 10) {
+      // Cierre Vertical
+      setMuroSwipeOffset({ x: 0, y: diffY });
     }
   };
 
   const handleMuroTouchEnd = (e) => {
-    const diffY = e.changedTouches[0].clientY - muroTouchStartRef.current.y;
-    const diffX = e.changedTouches[0].clientX - muroTouchStartRef.current.x;
+    setIsSwipingMuro(false);
+    const diffY = muroSwipeOffset.y;
+    const diffX = muroSwipeOffset.x;
 
-    if (Math.abs(diffY) > Math.abs(diffX)) {
-      // Intención de cerrar (Vertical)
-      if (Math.abs(diffY) > 80) cerrarItemMuro();
-      else setMuroSwipeOffset({ x: 0, y: 0 });
+    if (Math.abs(diffY) > 80) {
+      cerrarItemMuro();
+    } else if (diffX > 70 && itemActivoIndex > 0) {
+      retrocederItemMuro();
+      setMuroSwipeOffset({ x: 0, y: 0 });
+    } else if (diffX < -70 && itemActivoIndex < itemsMuro.length - 1) {
+      avanzarItemMuro();
+      setMuroSwipeOffset({ x: 0, y: 0 });
     } else {
-      // Intención de navegar (Horizontal)
-      if (diffX > 50) {
-        retrocederItemMuro(); // Deslizó a la derecha -> Foto anterior
-        setMuroSwipeOffset({ x: 0, y: 0 });
-      } else if (diffX < -50) {
-        avanzarItemMuro(); // Deslizó a la izquierda -> Foto siguiente
-        setMuroSwipeOffset({ x: 0, y: 0 });
-      } else {
-        setMuroSwipeOffset({ x: 0, y: 0 }); // No movió suficiente, rebota
-      }
+      setMuroSwipeOffset({ x: 0, y: 0 }); // No movió suficiente, rebota a su lugar original
     }
   };
 
-  // --- FUNCIONES DE CÁMARA Y GRABACIÓN (Sin cambios) ---
+  // --- FUNCIONES DE CÁMARA (Sin cambios) ---
   const iniciarCamara = async () => {
-    setVistaPrevia(null);
-    setComentario('');
-    setCamaraActiva(true);
-    setModoCamara('historia');
+    setVistaPrevia(null); setComentario(''); setCamaraActiva(true); setModoCamara('historia');
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: true });
       if (videoRef.current) videoRef.current.srcObject = stream;
-    } catch (err) {
-      console.error(err);
-      alert("Necesitas dar permiso de cámara y micrófono.");
-      setCamaraActiva(false);
-    }
+    } catch (err) { alert("Necesitas dar permiso de cámara y micrófono."); setCamaraActiva(false); }
   };
 
   const detenerCamara = () => {
-    if (videoRef.current && videoRef.current.srcObject) {
-      videoRef.current.srcObject.getTracks().forEach(track => track.stop());
-    }
-    setCamaraActiva(false);
-    setGrabando(false);
-    grabandoRef.current = false;
-    capturandoRef.current = false;
+    if (videoRef.current && videoRef.current.srcObject) videoRef.current.srcObject.getTracks().forEach(track => track.stop());
+    setCamaraActiva(false); setGrabando(false); grabandoRef.current = false; capturandoRef.current = false;
     setProgresoGrabacion(0);
     if (maxDuracionTimer.current) clearTimeout(maxDuracionTimer.current);
     if (intervalProgressRef.current) clearInterval(intervalProgressRef.current);
@@ -268,8 +227,7 @@ export default function MuroEvento() {
       return;
     } 
     if (capturandoRef.current || isPressing.current) return;
-    isPressing.current = true;
-    chunksRef.current = [];
+    isPressing.current = true; chunksRef.current = [];
     pressTimer.current = setTimeout(() => { if (isPressing.current) iniciarGrabacionVideo('historia'); }, 450);
   };
 
@@ -285,81 +243,48 @@ export default function MuroEvento() {
 
   const iniciarGrabacionVideo = (destinoDest) => {
     if (!videoRef.current || !videoRef.current.srcObject || capturandoRef.current) return;
-    setGrabando(true);
-    grabandoRef.current = true;
-    capturandoRef.current = true;
-    setProgresoGrabacion(0);
-
+    setGrabando(true); grabandoRef.current = true; capturandoRef.current = true; setProgresoGrabacion(0);
     const stream = videoRef.current.srcObject;
     let options = { mimeType: 'video/webm' };
     if (!MediaRecorder.isTypeSupported('video/webm')) options = { mimeType: 'video/mp4' };
     const limiteMs = destinoDest === 'historia' ? 10000 : 20000;
-
     try {
       const mediaRecorder = new MediaRecorder(stream, options);
       mediaRecorderRef.current = mediaRecorder;
       mediaRecorder.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
       mediaRecorder.onstop = () => guardarEnVistaPrevia(new Blob(chunksRef.current, { type: options.mimeType }), 'video', destinoDest);
-
       let tiempoActual = 0;
-      intervalProgressRef.current = setInterval(() => {
-        tiempoActual += 100;
-        setProgresoGrabacion(Math.min((tiempoActual / limiteMs) * 100, 100));
-      }, 100);
-
+      intervalProgressRef.current = setInterval(() => { tiempoActual += 100; setProgresoGrabacion(Math.min((tiempoActual / limiteMs) * 100, 100)); }, 100);
       mediaRecorder.start();
       maxDuracionTimer.current = setTimeout(() => { if (grabandoRef.current) detenerGrabacionVideo(); }, limiteMs);
-    } catch(e) {
-      setGrabando(false);
-      grabandoRef.current = false;
-      capturandoRef.current = false;
-    }
+    } catch(e) { setGrabando(false); grabandoRef.current = false; capturandoRef.current = false; }
   };
 
   const detenerGrabacionVideo = () => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') mediaRecorderRef.current.stop();
-    setGrabando(false);
-    grabandoRef.current = false;
+    setGrabando(false); grabandoRef.current = false;
     if (maxDuracionTimer.current) clearTimeout(maxDuracionTimer.current);
     if (intervalProgressRef.current) clearInterval(intervalProgressRef.current);
   };
 
   const tomarFoto = () => {
     if (!videoRef.current) return;
-    const canvas = document.createElement('canvas');
-    canvas.width = videoRef.current.videoWidth;
-    canvas.height = videoRef.current.videoHeight;
+    const canvas = document.createElement('canvas'); canvas.width = videoRef.current.videoWidth; canvas.height = videoRef.current.videoHeight;
     canvas.getContext('2d').drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
     canvas.toBlob(blob => guardarEnVistaPrevia(blob, 'imagen', 'muro'), 'image/jpeg', 0.85);
   };
 
-  const guardarEnVistaPrevia = (blob, tipo, destino = 'muro') => {
-    setVistaPrevia({ blob, url: URL.createObjectURL(blob), tipo, destino });
-    detenerCamara();
-  };
-
-  const descartarCaptura = () => {
-    if (vistaPrevia?.url) URL.revokeObjectURL(vistaPrevia.url);
-    setVistaPrevia(null);
-    setComentario('');
-  };
+  const guardarEnVistaPrevia = (blob, tipo, destino = 'muro') => { setVistaPrevia({ blob, url: URL.createObjectURL(blob), tipo, destino }); detenerCamara(); };
+  const descartarCaptura = () => { if (vistaPrevia?.url) URL.revokeObjectURL(vistaPrevia.url); setVistaPrevia(null); setComentario(''); };
 
   const confirmarYSubir = async () => {
     if (!vistaPrevia) return;
-    setSubiendo(true);
-    const { blob, tipo, destino } = vistaPrevia;
+    setSubiendo(true); const { blob, tipo, destino } = vistaPrevia;
     try {
       const ruta = storageRef(storage, \`eventos/\${albumId}/\${Date.now()}.\${tipo === 'video' ? 'mp4' : 'jpg'}\`);
       await uploadBytes(ruta, blob);
       const urlDescarga = await getDownloadURL(ruta);
-      await addDoc(collection(db, 'albums', albumId, 'fotos'), {
-        url: urlDescarga, 
-        tipo, 
-        destino,
-        comentario: tipo === 'imagen' || destino === 'muro' ? comentario.trim() : '', 
-        creadoEn: new Date(), 
-        subidoPor: usuario ? usuario.uid : 'anonimo'
-      });
+      await addDoc(collection(db, 'albums', albumId, 'fotos'), { url: urlDescarga, tipo, destino, comentario: tipo === 'imagen' || destino === 'muro' ? comentario.trim() : '', creadoEn: new Date(), subidoPor: usuario ? usuario.uid : 'anonimo' });
       descartarCaptura();
     } catch (error) { alert("Error al subir."); } finally { setSubiendo(false); }
   };
@@ -372,25 +297,10 @@ export default function MuroEvento() {
       
       {/* --- VISOR DE HISTORIAS --- */}
       {visorHistorias !== null && (
-        <div 
-          className="fixed inset-0 z-[100] flex flex-col"
-          style={{
-            backgroundColor: \`rgba(0, 0, 0, \${Math.max(0, 1 - Math.abs(swipeOffset) / 400)})\`,
-            transform: \`translateY(\${swipeOffset}px)\`,
-            transition: swipeOffset === 0 ? 'transform 0.25s ease-out, background-color 0.25s ease-out' : 'none',
-            touchAction: 'none'
-          }}
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
-        >
+        <div className="fixed inset-0 z-[100] flex flex-col" style={{ backgroundColor: \`rgba(0, 0, 0, \${Math.max(0, 1 - Math.abs(swipeOffset) / 400)})\`, transform: \`translateY(\${swipeOffset}px)\`, transition: swipeOffset === 0 ? 'transform 0.25s ease-out, background-color 0.25s ease-out' : 'none', touchAction: 'none' }} onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
           <div className="absolute top-0 w-full p-4 pt-6 flex flex-col gap-3 z-[110] bg-gradient-to-b from-black/80 to-transparent pointer-events-none">
             <div className="flex gap-1 w-full shadow-sm">
-              {visorHistorias.lista.map((_, i) => (
-                <div key={i} className="h-1 flex-1 bg-white/30 rounded-full overflow-hidden">
-                  <div className="h-full bg-white transition-all duration-75 ease-linear" style={{ width: i === visorHistorias.currentIndex ? \`\${videoProgreso}%\` : i < visorHistorias.currentIndex ? '100%' : '0%' }}></div>
-                </div>
-              ))}
+              {visorHistorias.lista.map((_, i) => (<div key={i} className="h-1 flex-1 bg-white/30 rounded-full overflow-hidden"><div className="h-full bg-white transition-all duration-75 ease-linear" style={{ width: i === visorHistorias.currentIndex ? \`\${videoProgreso}%\` : i < visorHistorias.currentIndex ? '100%' : '0%' }}></div></div>))}
             </div>
             <div className="flex justify-between items-center px-1 pointer-events-auto">
               <span className="text-white text-xs font-bold tracking-widest uppercase shadow-black drop-shadow-md">Historia</span>
@@ -403,53 +313,71 @@ export default function MuroEvento() {
         </div>
       )}
 
-      {/* --- VISOR A PANTALLA COMPLETA DEL MURO (Ahora Interactivo con Gestos) --- */}
+      {/* --- VISOR A PANTALLA COMPLETA DEL MURO (CARRUSEL MÁGICO FILMSTRIP) --- */}
       {itemActivoIndex !== null && (
         <div 
-          className="fixed inset-0 z-[100] flex flex-col items-center justify-center backdrop-blur-sm"
+          className="fixed inset-0 z-[100] overflow-hidden backdrop-blur-sm"
           style={{
-            // El fondo se vuelve transparente si arrastramos hacia arriba o abajo
             backgroundColor: \`rgba(0, 0, 0, \${Math.max(0, 0.95 - Math.abs(muroSwipeOffset.y) / 400)})\`,
-            // Movemos la vista en el eje que corresponda
-            transform: \`translate(\${muroSwipeOffset.x}px, \${muroSwipeOffset.y}px)\`,
-            // Animación suave de regreso cuando se suelta el dedo sin cerrar
-            transition: (muroSwipeOffset.x === 0 && muroSwipeOffset.y === 0) ? 'transform 0.25s ease-out, background-color 0.25s ease-out' : 'none',
-            touchAction: 'none' // Previene comportamientos raros del navegador
+            transition: isSwipingMuro ? 'none' : 'background-color 0.3s ease-out',
+            touchAction: 'none'
           }}
-          onTouchStart={handleMuroTouchStart}
-          onTouchMove={handleMuroTouchMove}
-          onTouchEnd={handleMuroTouchEnd}
         >
-          <button onClick={cerrarItemMuro} className="absolute top-6 right-6 text-white text-4xl font-light z-[110] w-12 h-12 flex items-center justify-center bg-black/20 rounded-full">×</button>
-          
-          <div className="relative w-full h-full flex items-center justify-center">
-            {itemsMuro[itemActivoIndex].tipo === 'video' ? (
-              <video src={itemsMuro[itemActivoIndex].url} autoPlay playsInline controls className="max-w-full max-h-full object-contain" />
-            ) : (
-              <img src={itemsMuro[itemActivoIndex].url} className="max-w-full max-h-full object-contain" alt="Visor" />
-            )}
-            
-            {/* Los botones laterales se mantienen para quienes los toquen, pero deslizar ahora también funciona */}
-            {itemActivoIndex > 0 && <button onClick={retrocederItemMuro} className="absolute left-4 text-white text-4xl bg-black/40 rounded-full w-12 h-12 flex items-center justify-center pb-2 z-[110] hover:bg-black/60 hidden sm:flex">‹</button>}
-            {itemActivoIndex < itemsMuro.length - 1 && <button onClick={avanzarItemMuro} className="absolute right-4 text-white text-4xl bg-black/40 rounded-full w-12 h-12 flex items-center justify-center pb-2 z-[110] hover:bg-black/60 hidden sm:flex">›</button>}
-            
-            {itemsMuro[itemActivoIndex].comentario && (
-              <div className="absolute bottom-0 left-0 w-full p-8 pt-20 bg-gradient-to-t from-black via-black/80 to-transparent pointer-events-none">
-                <p className="text-white text-center leading-relaxed font-light text-lg">"{itemsMuro[itemActivoIndex].comentario}"</p>
-              </div>
-            )}
+          {/* Botones Fijos (Siempre visibles, no se deslizan) */}
+          <button onClick={cerrarItemMuro} className="absolute top-6 right-6 text-white text-4xl font-light z-[120] w-12 h-12 flex items-center justify-center bg-black/40 rounded-full shadow-lg border border-white/10 backdrop-blur-md">×</button>
+          {itemActivoIndex > 0 && <button onClick={retrocederItemMuro} className="absolute left-4 top-1/2 -translate-y-1/2 text-white text-4xl bg-black/40 rounded-full w-12 h-12 flex items-center justify-center pb-2 z-[120] hover:bg-black/60 hidden sm:flex">‹</button>}
+          {itemActivoIndex < itemsMuro.length - 1 && <button onClick={avanzarItemMuro} className="absolute right-4 top-1/2 -translate-y-1/2 text-white text-4xl bg-black/40 rounded-full w-12 h-12 flex items-center justify-center pb-2 z-[120] hover:bg-black/60 hidden sm:flex">›</button>}
+
+          {/* Contenedor Vertical (Para cerrar al arrastrar arriba/abajo) */}
+          <div 
+            className="relative w-full h-full"
+            style={{
+              transform: \`translateY(\${muroSwipeOffset.y}px)\`,
+              transition: isSwipingMuro ? 'none' : 'transform 0.3s ease-out'
+            }}
+            onTouchStart={handleMuroTouchStart}
+            onTouchMove={handleMuroTouchMove}
+            onTouchEnd={handleMuroTouchEnd}
+          >
+            {/* Tira del Carrusel (Filmstrip: Renderiza foto actual, anterior y siguiente) */}
+            {itemsMuro.map((item, index) => {
+              // Optimización: Solo dibujamos las fotos que están inmediatamente cerca para no explotar la memoria
+              if (Math.abs(index - itemActivoIndex) > 2) return null;
+
+              return (
+                <div
+                  key={item.id}
+                  className="absolute inset-0 w-full h-full flex items-center justify-center"
+                  style={{
+                    // Aquí ocurre la magia: Ubica cada foto a la izq o der, y le suma el movimiento del dedo
+                    transform: \`translateX(calc(\${(index - itemActivoIndex) * 100}% + \${muroSwipeOffset.x}px))\`,
+                    // Si soltamos el dedo (isSwiping = false), la transición hace que se deslice sola
+                    transition: isSwipingMuro ? 'none' : 'transform 0.35s cubic-bezier(0.25, 0.8, 0.25, 1)'
+                  }}
+                >
+                  {item.tipo === 'video' ? (
+                    <video src={item.url} autoPlay={index === itemActivoIndex} playsInline controls={index === itemActivoIndex} className="max-w-full max-h-full object-contain pointer-events-none" />
+                  ) : (
+                    <img src={item.url} className="max-w-full max-h-full object-contain pointer-events-none" alt="Visor" />
+                  )}
+
+                  {/* El comentario viaja pegado junto con la foto */}
+                  {item.comentario && (
+                    <div className="absolute bottom-0 left-0 w-full p-8 pt-20 bg-gradient-to-t from-black via-black/80 to-transparent pointer-events-none">
+                      <p className="text-white text-center leading-relaxed font-light text-lg drop-shadow-md">"{item.comentario}"</p>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
 
-      {/* --- CÁMARA Y SELECTOR DE MODOS --- */}
+      {/* --- CÁMARA, VISTA PREVIA Y CABECERAS (Sin cambios) --- */}
       {camaraActiva && (
         <div className="fixed inset-0 bg-black z-50 flex flex-col">
-          {grabando && (
-            <div className="absolute top-0 left-0 w-full h-1.5 bg-white/20 z-50">
-              <div className="h-full bg-red-600 rounded-r-md transition-all ease-linear" style={{ width: \`\${progresoGrabacion}%\` }}></div>
-            </div>
-          )}
+          {grabando && <div className="absolute top-0 left-0 w-full h-1.5 bg-white/20 z-50"><div className="h-full bg-red-600 rounded-r-md transition-all ease-linear" style={{ width: \`\${progresoGrabacion}%\` }}></div></div>}
           <div className="absolute top-4 w-full p-6 flex justify-between items-center z-50">
             <button onClick={detenerCamara} className="text-white text-4xl font-light">×</button>
             {grabando && <div className="bg-red-600 px-3 py-1 rounded-full text-white text-[10px] font-bold animate-pulse flex items-center gap-1.5"><span className="w-1.5 h-1.5 bg-white rounded-full"></span> {modoCamara === 'historia' ? 'HISTORIA (MAX 10S)' : 'VIDEO MURO (MAX 20S)'}</div>}
@@ -463,9 +391,7 @@ export default function MuroEvento() {
                 <button onClick={() => setModoCamara('videoMuro')} className={\`text-xs font-bold tracking-widest uppercase transition-all duration-300 \${modoCamara === 'videoMuro' ? 'text-white' : 'text-white/40'}\`}>VIDEO MURO</button>
               </div>
             )}
-            <p className="text-white text-[10px] opacity-75 mb-4 tracking-[0.2em] font-bold uppercase drop-shadow-md">
-              {modoCamara === 'historia' ? 'Toque: Foto • Mantener: Historia' : 'Toca para grabar (Máx 20s)'}
-            </p>
+            <p className="text-white text-[10px] opacity-75 mb-4 tracking-[0.2em] font-bold uppercase drop-shadow-md">{modoCamara === 'historia' ? 'Toque: Foto • Mantener: Historia' : 'Toca para grabar (Máx 20s)'}</p>
             <button onPointerDown={handleCamPointerDown} onPointerUp={handleCamPointerUp} onPointerLeave={handleCamPointerUp} onContextMenu={(e) => e.preventDefault()} style={{ touchAction: 'none' }} className={\`w-20 h-20 rounded-full border-4 flex items-center justify-center transition-all duration-300 \${grabando ? 'border-red-500 scale-110' : 'border-white'}\`}>
               <div className={\`bg-white transition-all duration-300 \${grabando ? 'w-8 h-8 rounded bg-red-500' : 'w-16 h-16 rounded-full'}\`}></div>
             </button>
@@ -473,7 +399,6 @@ export default function MuroEvento() {
         </div>
       )}
 
-      {/* --- VISTA PREVIA --- */}
       {vistaPrevia && (
         <div className="fixed inset-0 bg-black z-[80] flex flex-col justify-between p-6">
           <div className="flex-1 w-full flex items-center justify-center rounded-3xl overflow-hidden relative bg-zinc-900 shadow-2xl">
@@ -491,7 +416,6 @@ export default function MuroEvento() {
         </div>
       )}
 
-      {/* --- CABECERA Y CARRUSEL DE HISTORIAS --- */}
       <header className="bg-white pt-4 pb-5 shadow-sm sticky top-0 z-10 rounded-b-[2rem] flex flex-col">
         <div className="flex items-center justify-between px-6">
           <button onClick={() => router.push('/')} className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-50 text-gray-600">←</button>
@@ -519,7 +443,6 @@ export default function MuroEvento() {
         )}
       </header>
 
-      {/* --- MURO (Fotos y Videos en Autoplay) --- */}
       <main className="flex-1 p-6 overflow-y-auto pb-32">
         {itemsMuro.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center text-gray-400 mt-10"><div className="text-6xl mb-4 opacity-30">📷</div><p className="text-sm font-medium">Aún no hay contenido.</p></div>
@@ -532,10 +455,7 @@ export default function MuroEvento() {
                     <>
                       <video src={item.url} autoPlay loop muted playsInline className="w-full h-full object-cover opacity-90" />
                       <div className="absolute top-2 right-2 bg-black/20 backdrop-blur-sm p-1.5 rounded-full border border-white/20">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5 text-white">
-                          <rect x="2" y="6" width="15" height="12" rx="2" ry="2"></rect>
-                          <polygon points="17 10 22 7 22 17 17 14"></polygon>
-                        </svg>
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5 text-white"><rect x="2" y="6" width="15" height="12" rx="2" ry="2"></rect><polygon points="17 10 22 7 22 17 17 14"></polygon></svg>
                       </div>
                     </>
                   ) : (
@@ -559,9 +479,9 @@ export default function MuroEvento() {
 
 fs.writeFileSync(path.join(__dirname, 'src/pages/[albumId]/index.js'), muroCode.trim());
 
-console.log("✅ Implementado: Gestos 360° en Visor de Muro. Subiendo a GitHub...");
+console.log("✅ Implementado: Carrusel Inteligente en el visor (Efecto Filmstrip). Subiendo a GitHub...");
 try {
-  execSync('git add . && git commit -m "Agregado soporte para deslizar hacia arriba/abajo (cerrar) y a los costados (navegar) en la galeria del muro" && git push origin main', { stdio: 'inherit' });
+  execSync('git add . && git commit -m "Visor de muro mejorado con efecto de carrusel nativo y slider fluido" && git push origin main', { stdio: 'inherit' });
   console.log("🚀 ¡Actualización completada! Espera a Vercel.");
 } catch (err) {
   console.error("Error subiendo a GitHub:", err);
