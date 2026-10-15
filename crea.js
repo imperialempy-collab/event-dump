@@ -7,10 +7,8 @@ import { useRouter } from 'next/router';
 import { useState, useEffect, useRef } from 'react';
 import { db, storage } from '../../firebase/config';
 import { doc, getDoc, collection, addDoc, onSnapshot, query, orderBy } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/firestore'; // Error here, fixing below
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useAuthContext } from '../../context/AuthContext';
-import { ref as storageRef, uploadBytes as storageUploadBytes, getDownloadURL as storageGetDownloadURL } from 'firebase/storage';
-
 
 export default function MuroEvento() {
   const router = useRouter();
@@ -20,194 +18,243 @@ export default function MuroEvento() {
   const [album, setAlbum] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [menuAbierto, setMenuAbierto] = useState(false);
-  const [fotos, setFotos] = useState([]);
+  const [archivos, setArchivos] = useState([]);
   const [subiendo, setSubiendo] = useState(false);
 
-  const fileInputRef = useRef(null);
+  // --- ESTADOS DE LA CÁMARA WEB ---
+  const [camaraActiva, setCamaraActiva] = useState(false);
+  const [grabando, setGrabando] = useState(false);
+  const videoRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const chunksRef = useRef([]);
+  const pressTimer = useRef(null);
 
-  // Cargar datos del álbum
+  // 1. Cargar datos del álbum
   useEffect(() => {
     if (!albumId) return;
-
     const cargarDatos = async () => {
       try {
         const docRef = doc(db, 'albums', albumId);
         const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          setAlbum(docSnap.data());
-        } else {
-          alert("El evento no existe.");
-          router.push('/');
-        }
+        if (docSnap.exists()) setAlbum(docSnap.data());
         setCargando(false);
       } catch (error) {
-        console.error("Error cargando evento:", error);
+        console.error("Error", error);
         setCargando(false);
       }
     };
-
     cargarDatos();
-  }, [albumId, router]);
+  }, [albumId]);
 
-  // Escuchar fotos en tiempo real
+  // 2. Escuchar fotos y videos en tiempo real
   useEffect(() => {
     if (!albumId) return;
-
-    const q = query(
-      collection(db, 'albums', albumId, 'fotos'),
-      orderBy('creadoEn', 'desc')
-    );
-
+    const q = query(collection(db, 'albums', albumId, 'fotos'), orderBy('creadoEn', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const fotosMuro = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      setFotos(fotosMuro);
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setArchivos(data);
     });
-
     return () => unsubscribe();
   }, [albumId]);
 
-  const esAdmin = usuario && album && usuario.uid === album.adminId;
+  // Separar Historias (Videos) y Muro (Fotos)
+  const historias = archivos.filter(a => a.tipo === 'video');
+  const fotosGrid = archivos.filter(a => a.tipo === 'imagen');
 
-  // --- LÓGICA PARA SUBIR FOTOS ---
-  const handleBotonMas = () => {
-    fileInputRef.current.click();
-  };
-
-  const handleSeleccionArchivo = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    setSubiendo(true);
-
+  // --- FUNCIONES DE CÁMARA ESTILO INSTAGRAM ---
+  const iniciarCamara = async () => {
+    setCamaraActiva(true);
     try {
-      // 1. Crear referencia en Storage
-      const extension = file.name.split('.').pop();
-      const nombreArchivo = \`\${Date.now()}-\${Math.random().toString(36).substring(2)}.\${extension}\`;
-      const rutaStorage = storageRef(storage, \`eventos/\${albumId}/\${nombreArchivo}\`);
-
-      // 2. Subir archivo
-      await storageUploadBytes(rutaStorage, file);
-
-      // 3. Obtener URL de descarga
-      const urlDescarga = await storageGetDownloadURL(rutaStorage);
-
-      // 4. Guardar en Firestore
-      await addDoc(collection(db, 'albums', albumId, 'fotos'), {
-        url: urlDescarga,
-        tipo: file.type.startsWith('video/') ? 'video' : 'imagen',
-        creadoEn: new Date(),
-        subidoPor: usuario ? usuario.uid : 'invitado_anonimo'
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment' }, // Cámara trasera
+        audio: true
       });
-
-    } catch (error) {
-      console.error("Error al subir el archivo:", error);
-      alert("Hubo un error al subir la foto.");
-    } finally {
-      setSubiendo(false);
-      // Limpiar el input para permitir subir la misma foto de nuevo si es necesario
-      e.target.value = null;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Necesitas dar permiso de cámara y micrófono en tu navegador.");
+      setCamaraActiva(false);
     }
   };
 
+  const detenerCamara = () => {
+    if (videoRef.current && videoRef.current.srcObject) {
+      videoRef.current.srcObject.getTracks().forEach(track => track.stop());
+    }
+    setCamaraActiva(false);
+    setGrabando(false);
+  };
 
-  if (cargando) return <div className="min-h-screen bg-[#f8f9fa] flex items-center justify-center font-sans text-gray-400">Abriendo evento...</div>;
+  // Lógica de Tocar (Foto) vs Mantener Presionado (Video)
+  const handlePointerDown = () => {
+    chunksRef.current = [];
+    // Si mantiene presionado por más de 400ms, empezamos a grabar
+    pressTimer.current = setTimeout(() => {
+      iniciarGrabacionVideo();
+    }, 400);
+  };
+
+  const handlePointerUp = () => {
+    if (pressTimer.current) clearTimeout(pressTimer.current);
+    
+    if (grabando) {
+      // Soltó el botón, detener grabación de video
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+        mediaRecorderRef.current.stop();
+      }
+      setGrabando(false);
+    } else {
+      // Fue un toque rápido, tomar foto
+      tomarFoto();
+    }
+  };
+
+  const iniciarGrabacionVideo = () => {
+    if (!videoRef.current || !videoRef.current.srcObject) return;
+    setGrabando(true);
+    const stream = videoRef.current.srcObject;
+    
+    // Buscar el formato compatible en el navegador del celular
+    let options = { mimeType: 'video/webm' };
+    if (!MediaRecorder.isTypeSupported('video/webm')) {
+      options = { mimeType: 'video/mp4' };
+    }
+
+    try {
+      const mediaRecorder = new MediaRecorder(stream, options);
+      mediaRecorderRef.current = mediaRecorder;
+      mediaRecorder.ondataavailable = e => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+      mediaRecorder.onstop = () => procesarArchivo(new Blob(chunksRef.current, { type: options.mimeType }), 'video');
+      mediaRecorder.start();
+    } catch(e) {
+      console.error(e);
+      alert("Tu navegador no soporta grabación de video.");
+      setGrabando(false);
+    }
+  };
+
+  const tomarFoto = () => {
+    if (!videoRef.current) return;
+    const canvas = document.createElement('canvas');
+    canvas.width = videoRef.current.videoWidth;
+    canvas.height = videoRef.current.videoHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+    
+    canvas.toBlob(blob => {
+      procesarArchivo(blob, 'imagen');
+    }, 'image/jpeg', 0.8);
+  };
+
+  const procesarArchivo = async (blob, tipo) => {
+    detenerCamara();
+    setSubiendo(true);
+    try {
+      const extension = tipo === 'video' ? 'mp4' : 'jpg';
+      const nombreArchivo = \`\${Date.now()}-\${Math.random().toString(36).substring(2)}.\${extension}\`;
+      const ruta = storageRef(storage, \`eventos/\${albumId}/\${nombreArchivo}\`);
+      
+      await uploadBytes(ruta, blob);
+      const urlDescarga = await getDownloadURL(ruta);
+
+      await addDoc(collection(db, 'albums', albumId, 'fotos'), {
+        url: urlDescarga,
+        tipo: tipo,
+        creadoEn: new Date(),
+        subidoPor: usuario ? usuario.uid : 'anonimo'
+      });
+    } catch (error) {
+      console.error(error);
+      alert("Error al subir.");
+    } finally {
+      setSubiendo(false);
+    }
+  };
+
+  const esAdmin = usuario && album && usuario.uid === album.adminId;
+  if (cargando) return <div className="min-h-screen bg-[#f8f9fa] flex items-center justify-center font-sans">Cargando...</div>;
   if (!album) return null;
 
   return (
     <div className="min-h-screen bg-[#f8f9fa] flex flex-col font-sans overflow-hidden relative">
       
-      {/* Input oculto para la cámara */}
-      <input 
-        type="file" 
-        accept="image/*,video/*" 
-        capture="environment" 
-        ref={fileInputRef} 
-        onChange={handleSeleccionArchivo} 
-        style={{ display: 'none' }} 
-      />
-
-      {/* --- CABECERA --- */}
-      <header className="bg-white pt-4 pb-5 shadow-sm sticky top-0 z-10 rounded-b-[2rem] flex flex-col">
-        
-        <div className="flex items-center justify-between px-6">
-          <button 
-            onClick={() => router.push('/')}
-            className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-50 text-gray-600 hover:bg-gray-100 transition"
-          >
-            ←
-          </button>
-          
-          <div className="flex flex-col items-center flex-1 px-2 overflow-hidden">
-            <h1 className="text-xl font-serif text-black text-center leading-tight truncate w-full">
-              {album.nombreEvento}
-            </h1>
-            <p className="text-[10px] text-gray-400 uppercase tracking-widest mt-1 font-medium truncate">
-              {album.fechaEvento}
-            </p>
-          </div>
-          
-          <button 
-            onClick={() => setMenuAbierto(true)}
-            className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-50 text-gray-600 hover:bg-gray-100 transition text-2xl pb-2"
-          >
-            ⋮
-          </button>
-        </div>
-      </header>
-
-      {/* --- MENÚ LATERAL --- */}
-      {menuAbierto && (
-        <div 
-          className="fixed inset-0 bg-black/40 z-40 transition-opacity"
-          onClick={() => setMenuAbierto(false)}
-        ></div>
-      )}
-      <div className={\`fixed top-0 right-0 h-full w-72 bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out \${menuAbierto ? 'translate-x-0' : 'translate-x-full'}\`}>
-        <div className="p-6 h-full flex flex-col">
-          <div className="flex justify-between items-center mb-8">
-            <h2 className="text-xl font-bold font-serif text-black">Menú</h2>
-            <button onClick={() => setMenuAbierto(false)} className="text-gray-400 text-3xl hover:text-black">×</button>
-          </div>
-          <div className="flex flex-col space-y-2 flex-1">
-            {esAdmin ? (
-              <>
-                <p className="text-xs text-gray-400 uppercase tracking-widest font-bold mb-2">Administración</p>
-                <button className="w-full text-left p-4 rounded-2xl bg-gray-50 hover:bg-gray-100 font-medium text-gray-700 transition">⚙️ Configurar evento</button>
-                <button className="w-full text-left p-4 rounded-2xl bg-gray-50 hover:bg-gray-100 font-medium text-gray-700 transition">👥 Gestionar invitados</button>
-                <div className="flex-1"></div>
-                <button className="w-full text-left p-4 rounded-2xl bg-red-50 hover:bg-red-100 font-medium text-red-600 transition">🗑️ Eliminar álbum</button>
-              </>
-            ) : (
-              <>
-                <p className="text-xs text-gray-400 uppercase tracking-widest font-bold mb-2">Opciones</p>
-                <button className="w-full text-left p-4 rounded-2xl bg-gray-50 hover:bg-gray-100 font-medium text-gray-700 transition">📤 Compartir (Link / QR)</button>
-                <button className="w-full text-left p-4 rounded-2xl bg-gray-50 hover:bg-gray-100 font-medium text-gray-700 transition">🏆 Ranking de fotos</button>
-              </>
+      {/* --- CÁMARA ESTILO INSTAGRAM (Overlay a pantalla completa) --- */}
+      {camaraActiva && (
+        <div className="fixed inset-0 bg-black z-50 flex flex-col">
+          {/* Cabecera Cámara */}
+          <div className="absolute top-0 w-full p-6 flex justify-between items-center z-50">
+            <button onClick={detenerCamara} className="text-white text-4xl font-light hover:text-gray-300">×</button>
+            {grabando && (
+              <div className="bg-red-600 px-3 py-1 rounded-full text-white text-xs font-bold animate-pulse flex items-center gap-2 shadow-lg">
+                <span className="w-2 h-2 bg-white rounded-full"></span> GRABANDO
+              </div>
             )}
           </div>
+          
+          {/* Visor de Cámara */}
+          <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover bg-gray-900" />
+          
+          {/* Botón de Captura */}
+          <div className="absolute bottom-12 w-full flex flex-col items-center justify-center z-50">
+            <p className="text-white text-xs opacity-70 mb-4 tracking-widest font-medium uppercase drop-shadow-md">
+              Toca para foto • Mantén para historia
+            </p>
+            <button
+              onPointerDown={handlePointerDown}
+              onPointerUp={handlePointerUp}
+              onPointerLeave={handlePointerUp}
+              onContextMenu={(e) => e.preventDefault()} // Evita menús raros al mantener presionado
+              style={{ touchAction: 'none' }} // Crucial para que el navegador no interfiera
+              className={\`w-20 h-20 rounded-full border-4 flex items-center justify-center transition-all duration-300 \${grabando ? 'border-red-500 scale-110' : 'border-white'}\`}
+            >
+              <div className={\`bg-white transition-all duration-300 \${grabando ? 'w-8 h-8 rounded-md bg-red-500' : 'w-16 h-16 rounded-full'}\`}></div>
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* --- MURO --- */}
+      {/* --- CABECERA Y HISTORIAS --- */}
+      <header className="bg-white pt-4 pb-5 shadow-sm sticky top-0 z-10 rounded-b-[2rem] flex flex-col">
+        <div className="flex items-center justify-between px-6">
+          <button onClick={() => router.push('/')} className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-50 text-gray-600 hover:bg-gray-100">←</button>
+          <div className="flex flex-col items-center flex-1 px-2 overflow-hidden">
+            <h1 className="text-xl font-serif text-black truncate w-full text-center">{album.nombreEvento}</h1>
+            <p className="text-[10px] text-gray-400 uppercase tracking-widest mt-1 font-medium">{album.fechaEvento}</p>
+          </div>
+          <button onClick={() => setMenuAbierto(true)} className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-50 text-gray-600 pb-2 text-2xl">⋮</button>
+        </div>
+
+        {/* Carrusel de Historias Reales (Videos) */}
+        {historias.length > 0 && (
+          <div className="flex gap-3 overflow-x-auto mt-6 px-6 pb-2 [&::-webkit-scrollbar]:hidden">
+            {historias.map(historia => (
+              <div key={historia.id} className="flex-shrink-0 relative rounded-[16px] p-[2px] bg-blue-500">
+                <div className="w-14 h-20 bg-black rounded-[14px] overflow-hidden border-[2px] border-white relative flex items-center justify-center">
+                  <video src={historia.url} className="w-full h-full object-cover opacity-80" />
+                  <span className="absolute text-white text-xs">▶</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </header>
+
+      {/* --- MURO DE FOTOS (Cuadrícula) --- */}
       <main className="flex-1 p-6 overflow-y-auto pb-32">
-        {fotos.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-center text-gray-400 animate-fade-in mt-20">
-            <div className="text-6xl mb-4 opacity-50">👻</div>
-            <p className="text-lg font-medium text-gray-500">Aún no hay fotos.</p>
-            <p className="text-sm mt-1">¡Toca el botón y sé el primero!</p>
+        {fotosGrid.length === 0 ? (
+          <div className="h-full flex flex-col items-center justify-center text-center text-gray-400 mt-10">
+            <div className="text-6xl mb-4 opacity-30">📷</div>
+            <p className="text-sm font-medium">Aún no hay fotos.</p>
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-4 auto-rows-[200px]">
-            {fotos.map((foto) => (
-              <div key={foto.id} className="relative rounded-2xl overflow-hidden shadow-sm bg-gray-200">
-                {foto.tipo === 'video' ? (
-                  <video src={foto.url} className="w-full h-full object-cover" controls playsInline />
-                ) : (
-                  <img src={foto.url} alt="Momento del evento" className="w-full h-full object-cover" loading="lazy" />
-                )}
+            {fotosGrid.map((foto) => (
+              <div key={foto.id} className="relative rounded-2xl overflow-hidden bg-gray-200">
+                <img src={foto.url} className="w-full h-full object-cover" loading="lazy" />
               </div>
             ))}
           </div>
@@ -215,20 +262,16 @@ export default function MuroEvento() {
       </main>
 
       {/* --- BOTÓN FLOTANTE --- */}
-      <div className="fixed bottom-10 w-full flex justify-center z-20">
+      <div className="fixed bottom-10 w-full flex justify-center z-20 pointer-events-none">
         <button 
-          onClick={handleBotonMas}
+          onClick={iniciarCamara}
           disabled={subiendo}
-          className={\`bg-blue-600 text-white w-16 h-16 rounded-full shadow-[0_10px_25px_rgba(37,99,235,0.4)] flex items-center justify-center text-4xl pb-1 hover:bg-blue-700 transition transform \${subiendo ? 'opacity-50 cursor-not-allowed scale-95' : 'hover:-translate-y-1'}\`}
+          className={\`pointer-events-auto bg-blue-600 text-white w-16 h-16 rounded-full shadow-[0_10px_25px_rgba(37,99,235,0.4)] flex items-center justify-center text-4xl pb-1 hover:bg-blue-700 transition transform \${subiendo ? 'opacity-50 scale-95' : 'hover:-translate-y-1'}\`}
         >
-          {subiendo ? (
-            <span className="text-lg font-bold">⏳</span>
-          ) : (
-            '+'
-          )}
+          {subiendo ? <span className="text-lg">⏳</span> : '+'}
         </button>
       </div>
-      
+
     </div>
   );
 }
@@ -236,11 +279,10 @@ export default function MuroEvento() {
 
 fs.writeFileSync(path.join(__dirname, 'src/pages/[albumId]/index.js'), muroCode.trim());
 
-console.log("✅ Código de cámara nativa actualizado. Ejecutando subida a GitHub...");
+console.log("✅ Interfaz de Cámara Web instalada. Ejecutando subida a GitHub...");
 try {
-  execSync('git add . && git commit -m "Implementacion de camara nativa y muro de fotos" && git push origin main', { stdio: 'inherit' });
-  console.log("🚀 ¡Subida finalizada! Vercel ya está leyendo GitHub y procesando los cambios.");
-  console.log("Espera unos segundos, recarga la app en tu celular, entra a un álbum y prueba tocar el '+'");
+  execSync('git add . && git commit -m "Implementacion de camara web personalizada para foto y video" && git push origin main', { stdio: 'inherit' });
+  console.log("🚀 ¡Subida finalizada! Espera a Vercel.");
 } catch (err) {
   console.error("Error subiendo a GitHub:", err);
 }
