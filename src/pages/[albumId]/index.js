@@ -34,15 +34,16 @@ export default function MuroEvento() {
   const [vistaPrevia, setVistaPrevia] = useState(null);
   const [comentario, setComentario] = useState('');
 
-  // --- ESTADOS DE VISORES (FOTOS Y HISTORIAS) ---
+  // --- ESTADOS DE VISORES ---
   const [historiasVistas, setHistoriasVistas] = useState([]);
   const [fotoActivaIndex, setFotoActivaIndex] = useState(null);
+  const [visorHistorias, setVisorHistorias] = useState(null);
+  const [videoProgreso, setVideoProgreso] = useState(0);
   
-  // Nuevo Cerebro del Visor de Historias (Congela el orden mientras se mira)
-  const [visorHistorias, setVisorHistorias] = useState(null); // { historias: [], currentIndex: 0 }
-  const [videoProgreso, setVideoProgreso] = useState(0); // 0 a 100 para la raya que se quema
+  // --- NUEVO: ESTADOS PARA EL DESLIZAMIENTO (SWIPE TO DISMISS) ---
+  const [swipeOffset, setSwipeOffset] = useState(0);
+  const touchStartRef = useRef({ x: 0, y: 0 });
 
-  // 1. Cargar datos del álbum y las historias vistas en este celular
   useEffect(() => {
     if (!albumId) return;
     const cargarDatos = async () => {
@@ -64,7 +65,6 @@ export default function MuroEvento() {
     }
   }, [albumId]);
 
-  // 2. Escuchar fotos y videos
   useEffect(() => {
     if (!albumId) return;
     const q = query(collection(db, 'albums', albumId, 'fotos'), orderBy('creadoEn', 'desc'));
@@ -75,7 +75,6 @@ export default function MuroEvento() {
     return () => unsubscribe();
   }, [albumId]);
 
-  // 3. FILTRADO (5 Días máximo)
   const getTime = (item) => item.creadoEn?.toMillis ? item.creadoEn.toMillis() : (item.creadoEn ? new Date(item.creadoEn).getTime() : 0);
 
   const archivosValidos = archivos.filter(a => {
@@ -91,15 +90,14 @@ export default function MuroEvento() {
     return getTime(a) > hace24Horas;
   });
 
-  // 4. ORDENAR HISTORIAS (Nuevas primero, Vistas al fondo ordenadas cronológicamente)
   const historiasOrdenadas = [...historias].sort((a, b) => {
     const aVisto = historiasVistas.includes(a.id);
     const bVisto = historiasVistas.includes(b.id);
-    if (aVisto === bVisto) return getTime(b) - getTime(a); // Novedad
-    return aVisto ? 1 : -1; // No vistas primero
+    if (aVisto === bVisto) return getTime(b) - getTime(a);
+    return aVisto ? 1 : -1;
   });
 
-  // --- NUEVA LÓGICA DEL VISOR DE HISTORIAS ---
+  // --- FUNCIONES DEL VISOR DE HISTORIAS ---
   const marcarComoVista = (id) => {
     if (!historiasVistas.includes(id)) {
       const nuevasVistas = [...historiasVistas, id];
@@ -109,16 +107,14 @@ export default function MuroEvento() {
   };
 
   const abrirHistoria = (index) => {
-    // Congelamos el orden actual para que no "salte" mientras miramos
-    setVisorHistorias({
-      lista: historiasOrdenadas,
-      currentIndex: index
-    });
+    setVisorHistorias({ lista: historiasOrdenadas, currentIndex: index });
     setVideoProgreso(0);
+    setSwipeOffset(0);
     marcarComoVista(historiasOrdenadas[index].id);
   };
 
-  const avanzarHistoria = () => {
+  const avanzarHistoria = (e) => {
+    if (e) e.stopPropagation();
     if (visorHistorias.currentIndex < visorHistorias.lista.length - 1) {
       const nextIndex = visorHistorias.currentIndex + 1;
       setVisorHistorias({ ...visorHistorias, currentIndex: nextIndex });
@@ -129,7 +125,8 @@ export default function MuroEvento() {
     }
   };
 
-  const retrocederHistoria = () => {
+  const retrocederHistoria = (e) => {
+    if (e) e.stopPropagation();
     if (visorHistorias.currentIndex > 0) {
       const prevIndex = visorHistorias.currentIndex - 1;
       setVisorHistorias({ ...visorHistorias, currentIndex: prevIndex });
@@ -141,12 +138,46 @@ export default function MuroEvento() {
   const cerrarVisorHistorias = () => {
     setVisorHistorias(null);
     setVideoProgreso(0);
+    setSwipeOffset(0);
   };
 
   const handleTimeUpdate = (e) => {
     const { currentTime, duration } = e.target;
     if (duration > 0) {
       setVideoProgreso((currentTime / duration) * 100);
+    }
+  };
+
+  // --- LÓGICA DE ARRASTRAR PARA CERRAR (SWIPE TO DISMISS) ---
+  const handleTouchStart = (e) => {
+    touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    setSwipeOffset(0);
+  };
+
+  const handleTouchMove = (e) => {
+    const currentY = e.touches[0].clientY;
+    const currentX = e.touches[0].clientX;
+    const diffY = currentY - touchStartRef.current.y;
+    const diffX = currentX - touchStartRef.current.x;
+
+    // Solo mover si el usuario está deslizando hacia arriba o abajo (no a los costados)
+    if (Math.abs(diffY) > Math.abs(diffX) && Math.abs(diffY) > 10) {
+      setSwipeOffset(diffY);
+    }
+  };
+
+  const handleTouchEnd = (e) => {
+    const endY = e.changedTouches[0].clientY;
+    const endX = e.changedTouches[0].clientX;
+    const diffY = endY - touchStartRef.current.y;
+    const diffX = endX - touchStartRef.current.x;
+
+    // Si arrastró hacia arriba o abajo más de 80 píxeles, cerramos
+    if (Math.abs(diffY) > Math.abs(diffX) && Math.abs(diffY) > 80) {
+      cerrarVisorHistorias();
+    } else {
+      // Si no fue suficiente fuerza, la historia rebota a su lugar
+      setSwipeOffset(0);
     }
   };
 
@@ -184,7 +215,7 @@ export default function MuroEvento() {
     if (intervalProgressRef.current) clearInterval(intervalProgressRef.current);
   };
 
-  const handlePointerDown = (e) => {
+  const handleCamPointerDown = (e) => {
     e.preventDefault();
     if (capturandoRef.current || isPressing.current) return;
     isPressing.current = true;
@@ -192,7 +223,7 @@ export default function MuroEvento() {
     pressTimer.current = setTimeout(() => { if (isPressing.current) iniciarGrabacionVideo(); }, 450);
   };
 
-  const handlePointerUp = (e) => {
+  const handleCamPointerUp = (e) => {
     e.preventDefault();
     if (!isPressing.current) return;
     isPressing.current = false;
@@ -282,12 +313,26 @@ export default function MuroEvento() {
   return (
     <div className="min-h-screen bg-[#f8f9fa] flex flex-col font-sans overflow-hidden relative">
       
-      {/* --- VISOR DE HISTORIAS A PANTALLA COMPLETA --- */}
+      {/* --- VISOR DE HISTORIAS INTERACTIVO (Swipe to dismiss) --- */}
       {visorHistorias !== null && (
-        <div className="fixed inset-0 bg-black z-[100] flex flex-col">
-          {/* Barra superior de progreso */}
+        <div 
+          className="fixed inset-0 z-[100] flex flex-col"
+          style={{
+            // El fondo se hace transparente a medida que arrastras
+            backgroundColor: `rgba(0, 0, 0, ${Math.max(0, 1 - Math.abs(swipeOffset) / 400)})`,
+            // Movemos toda la historia con el dedo
+            transform: `translateY(${swipeOffset}px)`,
+            // Animación suave solo cuando el dedo no está tocando (rebote)
+            transition: swipeOffset === 0 ? 'transform 0.25s ease-out, background-color 0.25s ease-out' : 'none',
+            touchAction: 'none' // Bloquea el scroll nativo del celular
+          }}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+        >
+          {/* Barra superior de progreso de la historia (Raya que se quema) */}
           <div className="absolute top-0 w-full p-4 pt-6 flex flex-col gap-3 z-[110] bg-gradient-to-b from-black/80 to-transparent pointer-events-none">
-            <div className="flex gap-1 w-full">
+            <div className="flex gap-1 w-full shadow-sm">
               {visorHistorias.lista.map((_, i) => (
                 <div key={i} className="h-1 flex-1 bg-white/30 rounded-full overflow-hidden">
                   <div 
@@ -303,10 +348,11 @@ export default function MuroEvento() {
             </div>
             <div className="flex justify-between items-center px-1 pointer-events-auto">
               <span className="text-white text-xs font-bold tracking-widest uppercase shadow-black drop-shadow-md">Historia</span>
-              <button onClick={cerrarVisorHistorias} className="text-white text-3xl font-light leading-none shadow-black drop-shadow-md">×</button>
+              <button onClick={cerrarVisorHistorias} className="text-white text-3xl font-light leading-none shadow-black drop-shadow-md pb-1">×</button>
             </div>
           </div>
 
+          {/* Reproductor de Video */}
           <video 
             src={visorHistorias.lista[visorHistorias.currentIndex].url} 
             autoPlay 
@@ -316,9 +362,9 @@ export default function MuroEvento() {
             className="w-full h-full object-cover"
           />
 
-          {/* Botones invisibles para tocar izquierda/derecha */}
-          <div className="absolute inset-y-0 left-0 w-1/3 z-[100]" onClick={retrocederHistoria}></div>
-          <div className="absolute inset-y-0 right-0 w-2/3 z-[100]" onClick={avanzarHistoria}></div>
+          {/* Zonas invisibles laterales para cambiar historia con toques */}
+          <div className="absolute inset-y-0 left-0 w-[30%] z-[100]" onClick={retrocederHistoria}></div>
+          <div className="absolute inset-y-0 right-0 w-[70%] z-[100]" onClick={avanzarHistoria}></div>
         </div>
       )}
 
@@ -348,7 +394,7 @@ export default function MuroEvento() {
         </div>
       )}
 
-      {/* --- CÁMARA Y VISTA PREVIA (Sin cambios) --- */}
+      {/* --- CÁMARA Y VISTA PREVIA --- */}
       {camaraActiva && (
         <div className="fixed inset-0 bg-black z-50 flex flex-col">
           {grabando && (
@@ -363,7 +409,7 @@ export default function MuroEvento() {
           <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover bg-gray-900" />
           <div className="absolute bottom-12 w-full flex flex-col items-center justify-center z-50">
             <p className="text-white text-[10px] opacity-75 mb-4 tracking-[0.25em] font-bold uppercase drop-shadow-md">Toque: Foto • Mantener: Historia</p>
-            <button onPointerDown={handlePointerDown} onPointerUp={handlePointerUp} onPointerLeave={handlePointerUp} onContextMenu={(e) => e.preventDefault()} style={{ touchAction: 'none' }} className={`w-20 h-20 rounded-full border-4 flex items-center justify-center transition-all duration-300 ${grabando ? 'border-red-500 scale-110' : 'border-white'}`}>
+            <button onPointerDown={handleCamPointerDown} onPointerUp={handleCamPointerUp} onPointerLeave={handleCamPointerUp} onContextMenu={(e) => e.preventDefault()} style={{ touchAction: 'none' }} className={`w-20 h-20 rounded-full border-4 flex items-center justify-center transition-all duration-300 ${grabando ? 'border-red-500 scale-110' : 'border-white'}`}>
               <div className={`bg-white transition-all duration-300 ${grabando ? 'w-8 h-8 rounded bg-red-500' : 'w-16 h-16 rounded-full'}`}></div>
             </button>
           </div>
