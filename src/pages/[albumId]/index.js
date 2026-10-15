@@ -18,7 +18,7 @@ export default function MuroEvento() {
 
   // --- ESTADOS DE CÁMARA Y GRABACIÓN ---
   const [camaraActiva, setCamaraActiva] = useState(false);
-  const [modoCamara, setModoCamara] = useState('historia'); // 'historia' o 'videoMuro'
+  const [modoCamara, setModoCamara] = useState('historia');
   const [grabando, setGrabando] = useState(false);
   const [progresoGrabacion, setProgresoGrabacion] = useState(0); 
   const videoRef = useRef(null);
@@ -32,12 +32,12 @@ export default function MuroEvento() {
   const capturandoRef = useRef(false);
 
   // --- ESTADOS DE VISTA PREVIA ---
-  const [vistaPrevia, setVistaPrevia] = useState(null); // Incluye {..., destino: 'muro' | 'historia'}
+  const [vistaPrevia, setVistaPrevia] = useState(null);
   const [comentario, setComentario] = useState('');
 
   // --- ESTADOS DE VISORES ---
   const [historiasVistas, setHistoriasVistas] = useState([]);
-  const [itemActivoIndex, setItemActivoIndex] = useState(null); // Ahora es itemActivo (puede ser foto o video)
+  const [itemActivoIndex, setItemActivoIndex] = useState(null);
   const [visorHistorias, setVisorHistorias] = useState(null);
   const [videoProgreso, setVideoProgreso] = useState(0);
   const [swipeOffset, setSwipeOffset] = useState(0);
@@ -79,11 +79,10 @@ export default function MuroEvento() {
     return getTime(a) > hace5Dias;
   });
 
-  // SEPARACIÓN INTELIGENTE (Compatibilidad con historias viejas)
   const itemsMuro = archivosValidos.filter(a => a.tipo === 'imagen' || a.destino === 'muro');
   
   const historias = archivosValidos.filter(a => {
-    if (a.tipo !== 'video' || a.destino === 'muro') return false; // Excluimos los videos de muro
+    if (a.tipo !== 'video' || a.destino === 'muro') return false;
     const hace24Horas = Date.now() - 24 * 60 * 60 * 1000;
     return getTime(a) > hace24Horas;
   });
@@ -162,7 +161,7 @@ export default function MuroEvento() {
     else setSwipeOffset(0);
   };
 
-  // --- LÓGICA DEL VISOR DEL MURO (Fotos y Videos) ---
+  // --- LÓGICA DEL VISOR DEL MURO ---
   const abrirItemMuro = (index) => setItemActivoIndex(index);
   const cerrarItemMuro = () => setItemActivoIndex(null);
   const avanzarItemMuro = (e) => { e.stopPropagation(); if (itemActivoIndex < itemsMuro.length - 1) setItemActivoIndex(itemActivoIndex + 1); };
@@ -197,29 +196,33 @@ export default function MuroEvento() {
     if (intervalProgressRef.current) clearInterval(intervalProgressRef.current);
   };
 
-  // CONTROL DE MODOS DE CÁMARA
+  // CONTROL DE MODOS DE CÁMARA CORREGIDO
   const handleCamPointerDown = (e) => {
     e.preventDefault();
-    if (capturandoRef.current || isPressing.current) return;
     
+    // Si estamos en modo Muro, priorizamos detener la grabación sin importar el bloqueo
     if (modoCamara === 'videoMuro') {
-      // Modo Video Muro: Un toque inicia o detiene (no requiere mantener)
       if (grabandoRef.current) {
         detenerGrabacionVideo();
-      } else {
-        iniciarGrabacionVideo('muro');
+        return; // Salimos para no volver a grabar
       }
-    } else {
-      // Modo Historia: Mantiene para video, suelta para foto
-      isPressing.current = true;
-      chunksRef.current = [];
-      pressTimer.current = setTimeout(() => { if (isPressing.current) iniciarGrabacionVideo('historia'); }, 450);
-    }
+      
+      // Si no estábamos grabando, comprobamos si está capturando para evitar spam
+      if (capturandoRef.current || isPressing.current) return;
+      iniciarGrabacionVideo('muro');
+      return;
+    } 
+    
+    // Si es Historia, mantenemos la lógica anterior
+    if (capturandoRef.current || isPressing.current) return;
+    isPressing.current = true;
+    chunksRef.current = [];
+    pressTimer.current = setTimeout(() => { if (isPressing.current) iniciarGrabacionVideo('historia'); }, 450);
   };
 
   const handleCamPointerUp = (e) => {
     e.preventDefault();
-    if (modoCamara === 'videoMuro') return; // En modo muro, levantar el dedo no hace nada
+    if (modoCamara === 'videoMuro') return; 
 
     if (!isPressing.current) return;
     isPressing.current = false;
@@ -240,7 +243,7 @@ export default function MuroEvento() {
     let options = { mimeType: 'video/webm' };
     if (!MediaRecorder.isTypeSupported('video/webm')) options = { mimeType: 'video/mp4' };
 
-    const limiteMs = destinoDest === 'historia' ? 10000 : 20000; // 10s Historia, 20s Muro
+    const limiteMs = destinoDest === 'historia' ? 10000 : 20000;
 
     try {
       const mediaRecorder = new MediaRecorder(stream, options);
@@ -302,7 +305,7 @@ export default function MuroEvento() {
       await addDoc(collection(db, 'albums', albumId, 'fotos'), {
         url: urlDescarga, 
         tipo, 
-        destino, // Marca crucial para saber si va arriba (historia) o abajo (muro)
+        destino,
         comentario: tipo === 'imagen' || destino === 'muro' ? comentario.trim() : '', 
         creadoEn: new Date(), 
         subidoPor: usuario ? usuario.uid : 'anonimo'
@@ -350,7 +353,7 @@ export default function MuroEvento() {
         </div>
       )}
 
-      {/* --- VISOR A PANTALLA COMPLETA DEL MURO (Fotos y Videos de 20s) --- */}
+      {/* --- VISOR A PANTALLA COMPLETA DEL MURO --- */}
       {itemActivoIndex !== null && (
         <div className="fixed inset-0 bg-black/95 z-[100] flex flex-col items-center justify-center backdrop-blur-sm">
           <button onClick={cerrarItemMuro} className="absolute top-6 right-6 text-white text-4xl font-light z-[110] w-12 h-12 flex items-center justify-center bg-black/20 rounded-full">×</button>
@@ -372,7 +375,7 @@ export default function MuroEvento() {
         </div>
       )}
 
-      {/* --- CÁMARA (NUEVO: Modo Selector) --- */}
+      {/* --- CÁMARA Y SELECTOR DE MODOS --- */}
       {camaraActiva && (
         <div className="fixed inset-0 bg-black z-50 flex flex-col">
           {grabando && (
@@ -387,7 +390,6 @@ export default function MuroEvento() {
           <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover bg-gray-900" />
           
           <div className="absolute bottom-8 w-full flex flex-col items-center justify-center z-50">
-            {/* SELECTOR DE MODO */}
             {!grabando && (
               <div className="flex gap-8 mb-6 drop-shadow-md">
                 <button onClick={() => setModoCamara('historia')} className={`text-xs font-bold tracking-widest uppercase transition-all duration-300 ${modoCamara === 'historia' ? 'text-white' : 'text-white/40'}`}>FOTO/HISTORIA</button>
@@ -399,7 +401,6 @@ export default function MuroEvento() {
               {modoCamara === 'historia' ? 'Toque: Foto • Mantener: Historia' : 'Toca para grabar (Máx 20s)'}
             </p>
             
-            {/* BOTÓN OBTURADOR */}
             <button 
               onPointerDown={handleCamPointerDown} 
               onPointerUp={handleCamPointerUp} 
@@ -472,7 +473,13 @@ export default function MuroEvento() {
                   {item.tipo === 'video' ? (
                     <>
                       <video src={item.url} autoPlay loop muted playsInline className="w-full h-full object-cover opacity-90" />
-                      <span className="absolute top-2 right-2 text-white bg-black/40 p-1.5 rounded-full text-xs">🎥</span>
+                      {/* ICONO DE VIDEO ESTÉTICO Y PROFESIONAL (SVG) */}
+                      <div className="absolute top-2 right-2 bg-black/20 backdrop-blur-sm p-1.5 rounded-full border border-white/20">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5 text-white">
+                          <rect x="2" y="6" width="15" height="12" rx="2" ry="2"></rect>
+                          <polygon points="17 10 22 7 22 17 17 14"></polygon>
+                        </svg>
+                      </div>
                     </>
                   ) : (
                     <img src={item.url} className="w-full h-full object-cover" loading="lazy" />
