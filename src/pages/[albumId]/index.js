@@ -13,7 +13,6 @@ export default function MuroEvento() {
   const [cargando, setCargando] = useState(true);
   const [menuAbierto, setMenuAbierto] = useState(false);
 
-  // --- SIMULACIÓN DE HISTORIAS ---
   const [historias, setHistorias] = useState([
     { id: 1, url: 'https://images.unsplash.com/photo-1511795409834-ef04bbd61622?auto=format&fit=crop&w=150&q=80', visto: false },
     { id: 2, url: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&w=150&q=80', visto: false },
@@ -22,14 +21,10 @@ export default function MuroEvento() {
     { id: 5, url: 'https://images.unsplash.com/photo-1520854221256-17451cc331bf?auto=format&fit=crop&w=150&q=80', visto: true },
   ]);
 
-  // Orden Dinámico: Manda las "vistas" al fondo de la fila
   const historiasOrdenadas = [...historias].sort((a, b) => (a.visto === b.visto ? 0 : a.visto ? 1 : -1));
 
-  // Función para tocar una historia
   const verHistoria = (id) => {
-    // Marcamos la historia como vista
     setHistorias(prev => prev.map(h => h.id === id ? { ...h, visto: true } : h));
-    // Simulamos que se abre
     alert('Abriendo historia... (Al cerrar, verás que el borde se pone gris y se va al fondo del listado).');
   };
 
@@ -64,10 +59,9 @@ export default function MuroEvento() {
   return (
     <div className="min-h-screen bg-[#f8f9fa] flex flex-col font-sans overflow-hidden">
       
-      {/* --- CABECERA (Modificada a columna para integrar historias) --- */}
+      {/* --- CABECERA --- */}
       <header className="bg-white pt-4 pb-5 shadow-sm sticky top-0 z-10 rounded-b-[2rem] flex flex-col">
         
-        {/* Fila 1: Botones y Título */}
         <div className="flex items-center justify-between px-6">
           <button 
             onClick={() => router.push('/')}
@@ -93,17 +87,15 @@ export default function MuroEvento() {
           </button>
         </div>
 
-        {/* Fila 2: Carrusel de Historias (Rectángulos estilo IG) */}
         <div className="flex gap-3 overflow-x-auto mt-6 px-6 pb-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
           {historiasOrdenadas.map(historia => (
             <button
               key={historia.id}
               onClick={() => verHistoria(historia.id)}
               className={`flex-shrink-0 relative rounded-[16px] p-[2px] transition-all duration-500 transform hover:scale-95 ${
-                historia.visto ? 'bg-gray-200' : 'bg-blue-500' // Borde azul si es nueva, gris si es vista
+                historia.visto ? 'bg-gray-200' : 'bg-blue-500' 
               }`}
             >
-              {/* Contenedor blanco interno para dar grosor al borde */}
               <div className="w-14 h-20 bg-white rounded-[14px] overflow-hidden border-[2px] border-white relative">
                 <img 
                   src={historia.url} 
@@ -117,7 +109,7 @@ export default function MuroEvento() {
 
       </header>
 
-      {/* --- MENÚ LATERAL (Se mantiene igual) --- */}
+      {/* --- MENÚ LATERAL --- */}
       {menuAbierto && (
         <div 
           className="fixed inset-0 bg-black/40 z-40 transition-opacity"
@@ -159,13 +151,13 @@ export default function MuroEvento() {
         </div>
       </main>
 
-      {/* --- BOTÓN FLOTANTE --- */}
+      {/* --- BOTÓN FLOTANTE (Modificado a signo más) --- */}
       <div className="fixed bottom-10 w-full flex justify-center pointer-events-none z-0">
         <button 
           onClick={() => alert("¡Aquí abriremos la cámara nativa!")}
-          className="pointer-events-auto bg-blue-600 text-white w-16 h-16 rounded-full shadow-[0_10px_25px_rgba(37,99,235,0.4)] flex items-center justify-center text-3xl hover:bg-blue-700 hover:-translate-y-1 transition transform"
+          className="pointer-events-auto bg-blue-600 text-white w-16 h-16 rounded-full shadow-[0_10px_25px_rgba(37,99,235,0.4)] flex items-center justify-center text-4xl pb-1 hover:bg-blue-700 hover:-translate-y-1 transition transform"
         >
-          📸
+          +
         </button>
       </div>
       
