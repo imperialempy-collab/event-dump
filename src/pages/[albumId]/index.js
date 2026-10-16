@@ -21,6 +21,11 @@ export default function MuroEvento() {
   const [loteArchivos, setLoteArchivos] = useState([]); 
   const [archivoEditandoIndex, setArchivoEditandoIndex] = useState(null);
 
+  // Estados específicos para el recortador de video profesional
+  const videoPreviewRef = useRef(null);
+  const [videoDuracion, setVideoDuracion] = useState(0);
+  const [tiempoInicio, setTiempoInicio] = useState(0);
+
   // Estados de visores
   const [historiasVistas, setHistoriasVistas] = useState([]);
   const [visorHistorias, setVisorHistorias] = useState(null);
@@ -60,6 +65,7 @@ export default function MuroEvento() {
 
   const getTime = (item) => item.creadoEn?.toMillis ? item.creadoEn.toMillis() : (item.creadoEn ? new Date(item.creadoEn).getTime() : 0);
 
+  // REGLA DE ORO DE 5 DÍAS: Todo se borra estrictamente a los 5 días del evento
   const archivosValidos = archivos.filter(a => (Date.now() - 5 * 24 * 60 * 60 * 1000) < getTime(a));
   const itemsMuro = archivosValidos.filter(a => a.tipo === 'imagen' || a.destino === 'muro');
   
@@ -87,18 +93,30 @@ export default function MuroEvento() {
         previewUrl: URL.createObjectURL(file),
         tipo,
         destino: 'muro',
-        comentario: ''
+        comentario: '',
+        trimStart: 0 // Segundo de inicio para el recorte
       };
     });
 
     setLoteArchivos(nuevosItems);
     setArchivoEditandoIndex(0);
+    setTiempoInicio(0);
     e.target.value = null;
   };
 
   const actualizarItemActual = (campo, valor) => {
     const actualizados = [...loteArchivos];
     actualizados[archivoEditandoIndex][campo] = valor;
+    
+    // Si cambia de destino, ajustamos el inicio del recorte si excede los límites nuevos
+    if (campo === 'destino') {
+      const maxDur = valor === 'historia' ? 10 : 20;
+      if (videoDuracion > maxDur && actualizados[archivoEditandoIndex].trimStart + maxDur > videoDuracion) {
+        actualizados[archivoEditandoIndex].trimStart = Math.max(0, videoDuracion - maxDur);
+        setTiempoInicio(actualizados[archivoEditandoIndex].trimStart);
+      }
+    }
+
     setLoteArchivos(actualizados);
   };
 
@@ -109,10 +127,31 @@ export default function MuroEvento() {
       setArchivoEditandoIndex(null);
     } else {
       setLoteArchivos(actualizados);
-      setArchivoEditandoIndex(Math.min(index, actualizados.length - 1));
+      const nuevoIndex = Math.min(index, actualizados.length - 1);
+      setArchivoEditandoIndex(nuevoIndex);
+      setTiempoInicio(actualizados[nuevoIndex].trimStart || 0);
     }
   };
 
+  // Manejador cuando carga el video en el editor para leer su duración
+  const handleVideoLoadedMetadata = (e) => {
+    const dur = e.target.duration;
+    setVideoDuracion(dur);
+    if (loteArchivos[archivoEditandoIndex]) {
+      setTiempoInicio(loteArchivos[archivoEditandoIndex].trimStart || 0);
+    }
+  };
+
+  const handleSliderChange = (e) => {
+    const val = parseFloat(e.target.value);
+    setTiempoInicio(val);
+    actualizarItemActual('trimStart', val);
+    if (videoPreviewRef.current) {
+      videoPreviewRef.current.currentTime = val;
+    }
+  };
+
+  // --- PROCESAMIENTO Y SUBIDA CON CORTE REAL (Canvas / MediaRecorder o Stream) ---
   const procesarYSubirLote = async () => {
     setSubiendo(true);
     try {
@@ -122,8 +161,13 @@ export default function MuroEvento() {
         setProgresoSubida(total === 1 ? 'Publicando...' : `Subiendo ${i + 1} de ${total}...`);
 
         let archivoFinal = item.file;
+
         if (item.tipo === 'imagen') {
           archivoFinal = await comprimirImagen(item.file);
+        } else if (item.tipo === 'video') {
+          // Si es video, aplicamos el recorte de tiempo exacto (Historia máx 10s, Muro máx 20s)
+          const maxDuracion = item.destino === 'historia' ? 10 : 20;
+          archivoFinal = await recortarVideoEnCliente(item.file, item.trimStart || 0, maxDuracion);
         }
 
         const extension = archivoFinal.name.split('.').pop() || (item.tipo === 'video' ? 'mp4' : 'jpg');
@@ -147,13 +191,14 @@ export default function MuroEvento() {
       setArchivoEditandoIndex(null);
     } catch (error) {
       console.error(error);
-      alert("Hubo un error al subir los archivos.");
+      alert("Hubo un error al procesar o subir los archivos.");
     } finally {
       setSubiendo(false);
       setProgresoSubida('');
     }
   };
 
+  // Compresor de imágenes
   const comprimirImagen = (file) => {
     return new Promise((resolve) => {
       const reader = new FileReader();
@@ -183,6 +228,67 @@ export default function MuroEvento() {
           canvas.toBlob((blob) => {
             resolve(new File([blob], file.name, { type: 'image/jpeg', lastModified: Date.now() }));
           }, 'image/jpeg', 0.82);
+        };
+      };
+    });
+  };
+
+  // Recortador de video profesional en cliente usando Canvas & MediaRecorder
+  const recortarVideoEnCliente = (file, startTime, maxDuration) => {
+    return new Promise((resolve) => {
+      const video = document.createElement('video');
+      video.src = URL.createObjectURL(file);
+      video.muted = true;
+      video.playsInline = true;
+
+      video.onloadedmetadata = () => {
+        const durationToRecord = Math.min(maxDuration, video.duration - startTime);
+        video.currentTime = startTime;
+
+        video.onseeked = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = video.videoWidth || 720;
+          canvas.height = video.videoHeight || 1280;
+          const ctx = canvas.getContext('2d');
+
+          const stream = canvas.captureStream(30); // 30 fps fluidos
+          let recorderOptions = { mimeType: 'video/webm;codecs=vp9' };
+          if (!MediaRecorder.isTypeSupported(recorderOptions.mimeType)) {
+            recorderOptions = { mimeType: 'video/mp4' };
+            if (!MediaRecorder.isTypeSupported(recorderOptions.mimeType)) {
+              recorderOptions = {}; // Predeterminado del navegador
+            }
+          }
+
+          let mediaRecorder;
+          try {
+            mediaRecorder = new MediaRecorder(stream, recorderOptions);
+          } catch(e) {
+            resolve(file); // Si el navegador no soporta grabación de canvas, devuelve el original
+            return;
+          }
+
+          const chunks = [];
+          mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+          mediaRecorder.onstop = () => {
+            const blob = new Blob(chunks, { type: recorderOptions.mimeType || 'video/mp4' });
+            const trimmedFile = new File([blob], file.name, { type: blob.type, lastModified: Date.now() });
+            resolve(trimmedFile);
+          };
+
+          mediaRecorder.start();
+          video.play();
+
+          const startTimeReal = Date.now();
+          const interval = setInterval(() => {
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const elapsed = (Date.now() - startTimeReal) / 1000;
+            if (elapsed >= durationToRecord || video.ended || video.currentTime >= startTime + durationToRecord) {
+              clearInterval(interval);
+              video.pause();
+              mediaRecorder.stop();
+            }
+          }, 33); // ~30fps
         };
       };
     });
@@ -262,6 +368,9 @@ export default function MuroEvento() {
   if (cargando) return <div className="min-h-screen flex items-center justify-center font-sans">Cargando...</div>;
   if (!album) return null;
 
+  const archivoActual = loteArchivos[archivoEditandoIndex];
+  const maxDuracionActual = archivoActual?.destino === 'historia' ? 10 : 20;
+
   return (
     <div className="min-h-screen bg-[#f8f9fa] flex flex-col font-sans overflow-hidden relative">
       
@@ -274,12 +383,12 @@ export default function MuroEvento() {
         style={{ display: 'none' }} 
       />
 
-      {/* --- PANTALLA DE REVISIÓN Y CONFIGURACIÓN (Estilo Red Social / Premium) --- */}
+      {/* --- EDITOR Y RECORTADOR PROFESIONAL ESTILO TIKTOK / INSTAGRAM --- */}
       {loteArchivos.length > 0 && archivoEditandoIndex !== null && (
         <div className="fixed inset-0 bg-black z-[150] flex flex-col justify-between p-5 md:p-8 animate-fade-in">
           
           {/* Barra Superior */}
-          <div className="flex justify-between items-center text-white pb-2 border-b border-white/10">
+          <div className="flex justify-between items-center text-white pb-3 border-b border-white/10">
             <button 
               onClick={() => { setLoteArchivos([]); setArchivoEditandoIndex(null); }}
               className="text-sm font-medium text-zinc-400 hover:text-white transition"
@@ -287,7 +396,7 @@ export default function MuroEvento() {
               Cancelar
             </button>
             <span className="text-xs font-semibold tracking-wider uppercase text-zinc-300">
-              {loteArchivos.length === 1 ? 'Nueva publicación' : `Archivo ${archivoEditandoIndex + 1} de ${loteArchivos.length}`}
+              {loteArchivos.length === 1 ? 'Editar contenido' : `Archivo ${archivoEditandoIndex + 1} de ${loteArchivos.length}`}
             </span>
             <button 
               onClick={() => eliminarItemDelLote(archivoEditandoIndex)}
@@ -297,25 +406,49 @@ export default function MuroEvento() {
             </button>
           </div>
 
-          {/* Contenedor de Medios (Limpio, sin carteles molestos) */}
-          <div className="flex-1 my-3 flex items-center justify-center relative overflow-hidden rounded-2xl bg-[#0a0a0a]">
-            {loteArchivos[archivoEditandoIndex].tipo === 'video' ? (
-              <video 
-                src={loteArchivos[archivoEditandoIndex].previewUrl} 
-                controls 
-                playsInline
-                className="max-h-full max-w-full object-contain" 
-              />
+          {/* Visualizador / Recortador */}
+          <div className="flex-1 my-3 flex flex-col items-center justify-center relative overflow-hidden rounded-2xl bg-[#0a0a0a]">
+            {archivoActual.tipo === 'video' ? (
+              <div className="w-full h-full flex flex-col items-center justify-center relative">
+                <video 
+                  ref={videoPreviewRef}
+                  src={archivoActual.previewUrl} 
+                  onLoadedMetadata={handleVideoLoadedMetadata}
+                  controls 
+                  playsInline
+                  className="max-h-[70%] max-w-full object-contain" 
+                />
+
+                {/* Barra deslizante de recorte profesional (Trim Slider) */}
+                {videoDuracion > maxDuracionActual && (
+                  <div className="w-full max-w-md px-6 mt-4 flex flex-col gap-1.5 bg-black/60 py-3 rounded-2xl backdrop-blur-md">
+                    <div className="flex justify-between text-[11px] text-zinc-400 font-medium">
+                      <span>Inicio: {tiempoInicio.toFixed(1)}s</span>
+                      <span className="text-blue-400 font-bold">Máx {maxDuracionActual}s</span>
+                      <span>Fin: {(tiempoInicio + maxDuracionActual).toFixed(1)}s</span>
+                    </div>
+                    <input 
+                      type="range" 
+                      min="0" 
+                      max={Math.max(0, videoDuracion - maxDuracionActual)} 
+                      step="0.1"
+                      value={tiempoInicio}
+                      onChange={handleSliderChange}
+                      className="w-full accent-blue-600 cursor-pointer"
+                    />
+                  </div>
+                )}
+              </div>
             ) : (
               <img 
-                src={loteArchivos[archivoEditandoIndex].previewUrl} 
+                src={archivoActual.previewUrl} 
                 className="max-h-full max-w-full object-contain" 
                 alt="Preview" 
               />
             )}
           </div>
 
-          {/* Mini Carrusel inferior si seleccionó varios archivos */}
+          {/* Mini Carrusel inferior si son varios archivos */}
           {loteArchivos.length > 1 && (
             <div className="flex gap-2 overflow-x-auto py-2 [&::-webkit-scrollbar]:hidden">
               {loteArchivos.map((item, idx) => (
@@ -334,35 +467,35 @@ export default function MuroEvento() {
             </div>
           )}
 
-          {/* Controles de Configuración Limpios */}
+          {/* Panel de Opciones */}
           <div className="bg-[#121214] border border-white/10 rounded-3xl p-5 flex flex-col gap-4 shadow-2xl">
             
-            {/* Selector de Destino Minimalista */}
+            {/* Selector de Destino limpio */}
             <div className="flex bg-[#222226] p-1 rounded-2xl">
               <button 
                 onClick={() => actualizarItemActual('destino', 'muro')}
-                className={`flex-1 py-3 rounded-xl text-xs font-bold tracking-wide transition ${loteArchivos[archivoEditandoIndex].destino === 'muro' ? 'bg-white text-black shadow-md' : 'text-zinc-400 hover:text-white'}`}
+                className={`flex-1 py-3 rounded-xl text-xs font-bold tracking-wide transition ${archivoActual.destino === 'muro' ? 'bg-white text-black shadow-md' : 'text-zinc-400 hover:text-white'}`}
               >
                 Muro
               </button>
               <button 
                 onClick={() => actualizarItemActual('destino', 'historia')}
-                className={`flex-1 py-3 rounded-xl text-xs font-bold tracking-wide transition ${loteArchivos[archivoEditandoIndex].destino === 'historia' ? 'bg-white text-black shadow-md' : 'text-zinc-400 hover:text-white'}`}
+                className={`flex-1 py-3 rounded-xl text-xs font-bold tracking-wide transition ${archivoActual.destino === 'historia' ? 'bg-white text-black shadow-md' : 'text-zinc-400 hover:text-white'}`}
               >
                 Historia
               </button>
             </div>
 
-            {/* Input de Comentario Elegante */}
+            {/* Comentario */}
             <input 
               type="text" 
               placeholder="Escribe un comentario..." 
-              value={loteArchivos[archivoEditandoIndex].comentario} 
+              value={archivoActual.comentario} 
               onChange={(e) => actualizarItemActual('comentario', e.target.value)}
               className="w-full bg-[#1c1c21] text-white placeholder-zinc-500 px-4 py-3.5 rounded-2xl outline-none border border-transparent focus:border-zinc-700 text-sm font-light transition"
             />
 
-            {/* Botón de Acción Principal */}
+            {/* Botón de Publicación Inteligente (1 vs Varios) */}
             <div className="flex gap-3 pt-1">
               {archivoEditandoIndex < loteArchivos.length - 1 ? (
                 <>
@@ -398,7 +531,7 @@ export default function MuroEvento() {
         </div>
       )}
 
-      {/* --- VISOR DE HISTORIAS --- */}
+      {/* --- VISORES --- */}
       {visorHistorias !== null && (
         <div className="fixed inset-0 z-[100] flex flex-col" style={{ backgroundColor: `rgba(0, 0, 0, ${Math.max(0, 1 - Math.abs(swipeOffset) / 400)})`, transform: `translateY(${swipeOffset}px)`, transition: swipeOffset === 0 ? 'transform 0.25s ease-out, background-color 0.25s ease-out' : 'none', touchAction: 'none' }} onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
           <div className="absolute top-0 w-full p-4 pt-6 flex flex-col gap-3 z-[110] bg-gradient-to-b from-black/80 to-transparent pointer-events-none">
@@ -416,7 +549,6 @@ export default function MuroEvento() {
         </div>
       )}
 
-      {/* --- VISOR DE MURO --- */}
       {itemActivoIndex !== null && (
         <div className="fixed inset-0 z-[100] overflow-hidden backdrop-blur-sm" style={{ backgroundColor: `rgba(0, 0, 0, ${Math.max(0, 0.95 - Math.abs(muroSwipeOffset.y) / 400)})`, transition: isSwipingMuro ? 'none' : 'background-color 0.3s ease-out', touchAction: 'none' }}>
           <button onClick={cerrarItemMuro} className="absolute top-6 right-6 text-white text-4xl font-light z-[120] w-12 h-12 flex items-center justify-center bg-black/40 rounded-full shadow-lg border border-white/10 backdrop-blur-md">×</button>
