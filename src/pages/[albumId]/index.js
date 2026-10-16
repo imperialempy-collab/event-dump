@@ -16,32 +16,11 @@ export default function MuroEvento() {
   const [archivos, setArchivos] = useState([]);
   const [subiendo, setSubiendo] = useState(false);
 
-  // --- ESTADOS DE CÁMARA Y HARDWARE ---
-  const [camaraActiva, setCamaraActiva] = useState(false);
-  const [modoCamara, setModoCamara] = useState('historia'); // 'historia' o 'videoMuro'
-  const [facingMode, setFacingMode] = useState('environment'); // 'environment' (trasera) o 'user' (selfie)
-  const [flashEncendido, setFlashEncendido] = useState(false);
-  const [soportaFlashWeb, setSoportaFlashWeb] = useState(false);
+  // Referencias para inputs nativos diferenciados
+  const fotoInputRef = useRef(null);
+  const videoInputRef = useRef(null);
 
-  const [grabando, setGrabando] = useState(false);
-  const [progresoGrabacion, setProgresoGrabacion] = useState(0); 
-  const videoRef = useRef(null);
-  const mediaRecorderRef = useRef(null);
-  const chunksRef = useRef([]);
-  const pressTimer = useRef(null);
-  const maxDuracionTimer = useRef(null);
-  const intervalProgressRef = useRef(null);
-  const isPressing = useRef(false);
-  const grabandoRef = useRef(false);
-  const capturandoRef = useRef(false);
-
-  // Inputs nativos ocultos para soporte iOS con Flash y selección estricta
-  const iosPhotoInputRef = useRef(null);
-  const iosVideoInputRef = useRef(null);
-
-  // --- ESTADOS DE VISTA PREVIA Y VISORES ---
-  const [vistaPrevia, setVistaPrevia] = useState(null);
-  const [comentario, setComentario] = useState('');
+  // Estados para visores (Mantiene toda tu lógica de visualización intacta)
   const [historiasVistas, setHistoriasVistas] = useState([]);
   const [visorHistorias, setVisorHistorias] = useState(null);
   const [videoProgreso, setVideoProgreso] = useState(0);
@@ -52,6 +31,12 @@ export default function MuroEvento() {
   const [muroSwipeOffset, setMuroSwipeOffset] = useState({ x: 0, y: 0 });
   const [isSwipingMuro, setIsSwipingMuro] = useState(false);
   const muroTouchStartRef = useRef({ x: 0, y: 0, ignore: false });
+
+  // Estado para mostrar opciones de cámara flotantes
+  const [menuCamaraAbierto, setMenuCamaraAbierto] = useState(false);
+  const [comentarioTemp, setComentarioTemp] = useState('');
+  const [archivoPendiente, setArchivoPendiente] = useState(null); // { file, tipo, destino }
+  const [modalComentarioAbierto, setModalComentarioAbierto] = useState(false);
 
   useEffect(() => {
     if (!albumId) return;
@@ -95,216 +80,54 @@ export default function MuroEvento() {
     return aVisto ? 1 : -1;
   });
 
-  // --- GESTIÓN DE CÁMARA Y HARDWARE (Linterna y Selfie) ---
-  const iniciarCamara = async (nuevoFacing = facingMode) => {
-    setVistaPrevia(null);
-    setComentario('');
-    setCamaraActiva(true);
-    setFlashEncendido(false);
-
-    try {
-      if (videoRef.current && videoRef.current.srcObject) {
-        videoRef.current.srcObject.getTracks().forEach(t => t.stop());
-      }
-
-      const constraints = {
-        video: { facingMode: nuevoFacing },
-        audio: true
-      };
-
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
-
-      // Comprobar soporte de linterna (Torch) para Android / Navegadores compatibles
-      const track = stream.getVideoTracks()[0];
-      const capabilities = track.getCapabilities ? track.getCapabilities() : {};
-      if (capabilities.torch) {
-        setSoportaFlashWeb(true);
-      } else {
-        setSoportaFlashWeb(false);
-      }
-
-    } catch (err) {
-      console.log("Cámara web avanzada no disponible, usando alternativa.", err);
-    }
-  };
-
-  const cambiarCamaraSelfie = () => {
-    const nuevoFacing = facingMode === 'environment' ? 'user' : 'environment';
-    setFacingMode(nuevoFacing);
-    if (nuevoFacing === 'user') setFlashEncendido(false); // La selfie no usa flash web
-    iniciarCamara(nuevoFacing);
-  };
-
-  const toggleFlashWeb = async () => {
-    // Detección de iOS (Safari)
-    const esIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-
-    if (esIOS) {
-      // Estrategia híbrida para iOS: Activamos los inputs nativos con flash forzado
-      if (modoCamara === 'historia') {
-        // Permitir elegir entre Foto o Historia en iOS con flash
-        const elegirVideo = confirm("¿Deseas grabar una Historia (Video) con Flash? Acepta para video, Cancela para foto.");
-        if (elegirVideo) {
-          iosVideoInputRef.current.click();
-        } else {
-          iosPhotoInputRef.current.click();
-        }
-      } else {
-        iosVideoInputRef.current.click(); // Video muro nativo iOS
-      }
-      return;
-    }
-
-    // Estrategia para Android / Web Estándar
-    if (!videoRef.current || !videoRef.current.srcObject) return;
-    const track = videoRef.current.srcObject.getVideoTracks()[0];
-    
-    try {
-      const nuevoEstado = !flashEncendido;
-      await track.applyConstraints({
-        advanced: [{ torch: nuevoEstado }]
-      });
-      setFlashEncendido(nuevoEstado);
-    } catch (e) {
-      console.error("Error aplicando linterna:", e);
-      alert("Tu dispositivo no permite controlar la linterna desde el navegador web.");
-    }
-  };
-
-  const detenerCamara = () => {
-    if (videoRef.current && videoRef.current.srcObject) {
-      videoRef.current.srcObject.getTracks().forEach(track => track.stop());
-    }
-    setCamaraActiva(false);
-    setGrabando(false);
-    grabandoRef.current = false;
-    capturandoRef.current = false;
-    setProgresoGrabacion(0);
-    setFlashEncendido(false);
-    if (maxDuracionTimer.current) clearTimeout(maxDuracionTimer.current);
-    if (intervalProgressRef.current) clearInterval(intervalProgressRef.current);
-  };
-
-  // Captura desde input nativo (Para iOS con Flash garantizado)
-  const handleSeleccionArchivoNativo = async (e, tipoArchivo, destinoArchivo) => {
+  // Manejador de selección de archivo nativo (Abre cámara de fábrica con linterna del celular)
+  const handleFileSelected = (e, destino) => {
     const file = e.target.files[0];
     if (!file) return;
-    detenerCamara();
-    guardarEnVistaPrevia(file, tipoArchivo, destinoArchivo);
+    setMenuCamaraAbierto(false);
+
+    const tipo = file.type.startsWith('video/') ? 'video' : 'imagen';
+
+    if (tipo === 'imagen' || destino === 'muro') {
+      setArchivoPendiente({ file, tipo, destino });
+      setModalComentarioAbierto(true);
+    } else {
+      // Subir historia directa
+      subirArchivoFinal(file, tipo, destino, '');
+    }
     e.target.value = null;
   };
 
-  // --- LÓGICA DE GRABACIÓN Y BOTONES DE CÁMARA ---
-  const handleCamPointerDown = (e) => {
-    e.preventDefault();
-    if (modoCamara === 'videoMuro') {
-      if (grabandoRef.current) { detenerGrabacionVideo(); return; }
-      if (capturandoRef.current || isPressing.current) return;
-      iniciarGrabacionVideo('muro');
-      return;
-    } 
-    if (capturandoRef.current || isPressing.current) return;
-    isPressing.current = true;
-    chunksRef.current = [];
-    pressTimer.current = setTimeout(() => { if (isPressing.current) iniciarGrabacionVideo('historia'); }, 450);
-  };
-
-  const handleCamPointerUp = (e) => {
-    e.preventDefault();
-    if (modoCamara === 'videoMuro') return; 
-    if (!isPressing.current) return;
-    isPressing.current = false;
-    if (pressTimer.current) clearTimeout(pressTimer.current);
-    if (grabandoRef.current) detenerGrabacionVideo();
-    else if (!capturandoRef.current) { capturandoRef.current = true; tomarFoto(); }
-  };
-
-  const iniciarGrabacionVideo = (destinoDest) => {
-    if (!videoRef.current || !videoRef.current.srcObject || capturandoRef.current) return;
-    setGrabando(true);
-    grabandoRef.current = true;
-    capturandoRef.current = true;
-    setProgresoGrabacion(0);
-
-    const stream = videoRef.current.srcObject;
-    let options = { mimeType: 'video/webm' };
-    if (!MediaRecorder.isTypeSupported('video/webm')) options = { mimeType: 'video/mp4' };
-    const limiteMs = destinoDest === 'historia' ? 10000 : 20000;
-
+  const subirArchivoFinal = async (file, tipo, destino, comentario) => {
+    setSubiendo(true);
     try {
-      const mediaRecorder = new MediaRecorder(stream, options);
-      mediaRecorderRef.current = mediaRecorder;
-      mediaRecorder.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
-      mediaRecorder.onstop = () => guardarEnVistaPrevia(new Blob(chunksRef.current, { type: options.mimeType }), 'video', destinoDest);
+      const extension = file.name.split('.').pop() || (tipo === 'video' ? 'mp4' : 'jpg');
+      const nombreArchivo = `${Date.now()}-${Math.random().toString(36).substring(2)}.${extension}`;
+      const ruta = storageRef(storage, `eventos/${albumId}/${nombreArchivo}`);
+      
+      await uploadBytes(ruta, file);
+      const urlDescarga = await getDownloadURL(ruta);
 
-      let tiempoActual = 0;
-      intervalProgressRef.current = setInterval(() => {
-        tiempoActual += 100;
-        setProgresoGrabacion(Math.min((tiempoActual / limiteMs) * 100, 100));
-      }, 100);
-
-      mediaRecorder.start();
-      maxDuracionTimer.current = setTimeout(() => { if (grabandoRef.current) detenerGrabacionVideo(); }, limiteMs);
-    } catch(e) {
-      setGrabando(false);
-      grabandoRef.current = false;
-      capturandoRef.current = false;
+      await addDoc(collection(db, 'albums', albumId, 'fotos'), {
+        url: urlDescarga,
+        tipo,
+        destino,
+        comentario: comentario.trim(),
+        creadoEn: new Date(),
+        subidoPor: usuario ? usuario.uid : 'anonimo'
+      });
+    } catch (error) {
+      console.error(error);
+      alert("Error al subir el archivo.");
+    } finally {
+      setSubiendo(false);
+      setModalComentarioAbierto(false);
+      setArchivoPendiente(null);
+      setComentarioTemp('');
     }
   };
 
-  const detenerGrabacionVideo = () => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') mediaRecorderRef.current.stop();
-    setGrabando(false);
-    grabandoRef.current = false;
-    if (maxDuracionTimer.current) clearTimeout(maxDuracionTimer.current);
-    if (intervalProgressRef.current) clearInterval(intervalProgressRef.current);
-  };
-
-  const tomarFoto = () => {
-    if (!videoRef.current) return;
-    const canvas = document.createElement('canvas');
-    canvas.width = videoRef.current.videoWidth;
-    canvas.height = videoRef.current.videoHeight;
-    canvas.getContext('2d').drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-    canvas.toBlob(blob => guardarEnVistaPrevia(blob, 'imagen', 'muro'), 'image/jpeg', 0.85);
-  };
-
-  const guardarEnVistaPrevia = (blobOrFile, tipo, destino = 'muro') => {
-    const url = URL.createObjectURL(blobOrFile);
-    setVistaPrevia({ blob: blobOrFile, url, tipo, destino });
-    detenerCamara();
-  };
-
-  const descartarCaptura = () => {
-    if (vistaPrevia?.url) URL.revokeObjectURL(vistaPrevia.url);
-    setVistaPrevia(null);
-    setComentario('');
-  };
-
-  const confirmarYSubir = async () => {
-    if (!vistaPrevia) return;
-    setSubiendo(true);
-    const { blob, tipo, destino } = vistaPrevia;
-    try {
-      const ruta = storageRef(storage, `eventos/${albumId}/${Date.now()}.${tipo === 'video' ? 'mp4' : 'jpg'}`);
-      await uploadBytes(ruta, blob);
-      const urlDescarga = await getDownloadURL(ruta);
-      await addDoc(collection(db, 'albums', albumId, 'fotos'), {
-        url: urlDescarga, 
-        tipo, 
-        destino,
-        comentario: tipo === 'imagen' || destino === 'muro' ? comentario.trim() : '', 
-        creadoEn: new Date(), 
-        subidoPor: usuario ? usuario.uid : 'anonimo'
-      });
-      descartarCaptura();
-    } catch (error) { alert("Error al subir."); } finally { setSubiendo(false); }
-  };
-
-  // --- VISORES DE HISTORIAS Y MURO ---
+  // --- VISORES DE HISTORIAS Y MURO (Totalmente intactos) ---
   useEffect(() => {
     if (itemActivoIndex !== null) {
       itemsMuro.forEach((item, index) => {
@@ -361,7 +184,7 @@ export default function MuroEvento() {
       if (itemActivoIndex === itemsMuro.length - 1 && diffX < 0) moveX = diffX * 0.25; 
       setMuroSwipeOffset({ x: moveX, y: 0 });
     } else if (Math.abs(diffY) > Math.abs(diffX) && Math.abs(muroSwipeOffset.x) < 10) {
-      setMuroSwipeOffset({ x: 0, y: diffY });
+      setMuroSwipeOffset({ x: 0, y:ดินDiffY });
     }
   };
   const handleMuroTouchEnd = (e) => {
@@ -381,9 +204,9 @@ export default function MuroEvento() {
   return (
     <div className="min-h-screen bg-[#f8f9fa] flex flex-col font-sans overflow-hidden relative">
       
-      {/* Inputs ocultos para compatibilidad iOS con flash garantizado */}
-      <input type="file" accept="image/*" capture="environment" ref={iosPhotoInputRef} onChange={(e) => handleSeleccionArchivoNativo(e, 'imagen', 'muro')} style={{ display: 'none' }} />
-      <input type="file" accept="video/*" capture="environment" ref={iosVideoInputRef} onChange={(e) => handleSeleccionArchivoNativo(e, 'video', modoCamara === 'historia' ? 'historia' : 'muro')} style={{ display: 'none' }} />
+      {/* Inputs Nativos Ocultos para activar la cámara oficial del teléfono con linterna nativa */}
+      <input type="file" accept="image/*" capture="environment" ref={fotoInputRef} onChange={(e) => handleFileSelected(e, 'muro')} style={{ display: 'none' }} />
+      <input type="file" accept="video/*" capture="environment" ref={videoInputRef} onChange={(e) => handleFileSelected(e, 'historia')} style={{ display: 'none' }} />
 
       {/* --- VISOR DE HISTORIAS --- */}
       {visorHistorias !== null && (
@@ -432,77 +255,64 @@ export default function MuroEvento() {
         </div>
       )}
 
-      {/* --- CÁMARA CON LINTERNA Y SELFIE SVG PROFESIONALES --- */}
-      {camaraActiva && (
-        <div className="fixed inset-0 bg-black z-50 flex flex-col">
-          {grabando && <div className="absolute top-0 left-0 w-full h-1.5 bg-white/20 z-50"><div className="h-full bg-red-600 rounded-r-md transition-all ease-linear" style={{ width: `${progresoGrabacion}%` }}></div></div>}
-          
-          <div className="absolute top-4 w-full p-6 flex justify-between items-center z-50">
-            <button onClick={detenerCamara} className="text-white text-4xl font-light">×</button>
-            
-            {/* BOTONES SUPERIORES DE HARDWARE (Linterna y Selfie con Íconos Profesionales SVG) */}
-            <div className="flex items-center gap-3">
-              {/* Botón Linterna (Flash) */}
+      {/* --- MODAL DE COMENTARIO RÁPIDO ANTES DE SUBIR FOTO/VIDEO --- */}
+      {modalComentarioAbierto && (
+        <div className="fixed inset-0 bg-black/80 z-[150] flex flex-col items-center justify-center p-6 backdrop-blur-md">
+          <div className="w-full max-w-sm bg-white rounded-3xl p-6 shadow-2xl flex flex-col gap-4">
+            <h3 className="text-lg font-serif font-bold text-black text-center">Añade un comentario</h3>
+            <p className="text-xs text-gray-500 text-center">Opcional para tu foto o video del muro</p>
+            <input 
+              type="text" 
+              placeholder="Escribe algo..." 
+              value={comentarioTemp} 
+              onChange={(e) => setComentarioTemp(e.target.value)}
+              className="w-full bg-gray-100 px-4 py-3 rounded-xl border border-gray-200 outline-none text-sm text-black"
+            />
+            <div className="flex gap-3 mt-2">
               <button 
-                onClick={toggleFlashWeb} 
-                className={`p-3 rounded-full backdrop-blur-md border transition-all duration-300 ${flashEncendido ? 'bg-amber-500/80 border-amber-300 text-white shadow-[0_0_15px_rgba(245,158,11,0.6)]' : 'bg-black/30 border-white/20 text-white hover:bg-black/50'}`}
-                title="Linterna / Flash"
+                onClick={() => { setModalComentarioAbierto(false); setArchivoPendiente(null); setComentarioTemp(''); }}
+                className="flex-1 py-3 bg-gray-200 text-gray-700 font-bold rounded-xl text-sm"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={flashEncendido ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
-                </svg>
+                Cancelar
               </button>
-
-              {/* Botón Cámara Frontal / Selfie */}
               <button 
-                onClick={cambiarCamaraSelfie} 
-                className="p-3 rounded-full bg-black/30 backdrop-blur-md border border-white/20 text-white hover:bg-black/50 transition"
-                title="Cambiar cámara"
+                onClick={() => subirArchivoFinal(archivoPendiente.file, archivoPendiente.tipo, archivoPendiente.destino, comentarioTemp)}
+                disabled={subiendo}
+                className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl text-sm shadow-md"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-                  <path d="M11 19H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5"></path>
-                  <path d="M13 5h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-7"></path>
-                  <circle cx="12" cy="12" r="3"></circle>
-                  <path d="M18 22l-3-3 3-3"></path>
-                  <path d="M6 2l3 3-3 3"></path>
-                </svg>
+                {subiendo ? 'Subiendo...' : 'Publicar'}
               </button>
             </div>
-          </div>
-
-          <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover bg-gray-900" />
-          
-          <div className="absolute bottom-8 w-full flex flex-col items-center justify-center z-50">
-            {!grabando && (
-              <div className="flex gap-8 mb-6 drop-shadow-md">
-                <button onClick={() => setModoCamara('historia')} className={`text-xs font-bold tracking-widest uppercase transition-all duration-300 ${modoCamara === 'historia' ? 'text-white' : 'text-white/40'}`}>FOTO/HISTORIA</button>
-                <button onClick={() => setModoCamara('videoMuro')} className={`text-xs font-bold tracking-widest uppercase transition-all duration-300 ${modoCamara === 'videoMuro' ? 'text-white' : 'text-white/40'}`}>VIDEO MURO</button>
-              </div>
-            )}
-            <p className="text-white text-[10px] opacity-75 mb-4 tracking-[0.2em] font-bold uppercase drop-shadow-md">
-              {modoCamara === 'historia' ? 'Toque: Foto • Mantener: Historia' : 'Toca para grabar (Máx 20s)'}
-            </p>
-            <button onPointerDown={handleCamPointerDown} onPointerUp={handleCamPointerUp} onPointerLeave={handleCamPointerUp} onContextMenu={(e) => e.preventDefault()} style={{ touchAction: 'none' }} className={`w-20 h-20 rounded-full border-4 flex items-center justify-center transition-all duration-300 ${grabando ? 'border-red-500 scale-110' : 'border-white'}`}>
-              <div className={`bg-white transition-all duration-300 ${grabando ? 'w-8 h-8 rounded bg-red-500' : 'w-16 h-16 rounded-full'}`}></div>
-            </button>
           </div>
         </div>
       )}
 
-      {/* --- VISTA PREVIA --- */}
-      {vistaPrevia && (
-        <div className="fixed inset-0 bg-black z-[80] flex flex-col justify-between p-6">
-          <div className="flex-1 w-full flex items-center justify-center rounded-3xl overflow-hidden relative bg-zinc-900 shadow-2xl">
-            {vistaPrevia.tipo === 'video' ? <video src={vistaPrevia.url} autoPlay loop playsInline className="w-full h-full object-cover" /> : <img src={vistaPrevia.url} className="w-full h-full object-cover" />}
-            {(vistaPrevia.tipo === 'imagen' || vistaPrevia.destino === 'muro') && (
-              <div className="absolute bottom-0 left-0 w-full p-6 bg-gradient-to-t from-black/80 via-black/40 to-transparent z-40">
-                <input type="text" placeholder="Escribe un comentario..." value={comentario} onChange={(e) => setComentario(e.target.value)} className="w-full bg-white/20 text-white placeholder-white/70 font-medium px-5 py-4 rounded-2xl outline-none border border-white/25 backdrop-blur-md transition-all text-sm" />
-              </div>
-            )}
-          </div>
-          <div className="flex justify-between gap-4 mt-6">
-            <button onClick={descartarCaptura} disabled={subiendo} className="flex-1 py-4.5 bg-zinc-800 text-white font-bold rounded-2xl">Cancelar</button>
-            <button onClick={confirmarYSubir} disabled={subiendo} className={`flex-1 py-4.5 bg-blue-600 text-white font-bold rounded-2xl ${subiendo ? 'opacity-60' : ''}`}>{subiendo ? 'Guardando...' : 'Confirmar y subir'}</button>
+      {/* --- MENÚ FLOTANTE DE SELECCIÓN DE CÁMARA (Nativo con linterna) --- */}
+      {menuCamaraAbierto && (
+        <div className="fixed inset-0 bg-black/60 z-[90] flex items-end justify-center pb-24 px-6 backdrop-blur-sm animate-fade-in" onClick={() => setMenuCamaraAbierto(false)}>
+          <div className="w-full max-w-xs bg-white rounded-3xl p-4 shadow-2xl flex flex-col gap-2" onClick={(e) => e.stopPropagation()}>
+            <p className="text-center text-[10px] uppercase font-bold tracking-widest text-gray-400 py-2">Selecciona modo de captura</p>
+            
+            <button 
+              onClick={() => fotoInputRef.current.click()}
+              className="w-full py-4 bg-gray-50 hover:bg-gray-100 rounded-2xl font-bold text-gray-800 flex items-center justify-center gap-3 transition"
+            >
+              <span>📷</span> Sacar Foto (Muro)
+            </button>
+            
+            <button 
+              onClick={() => videoInputRef.current.click()}
+              className="w-full py-4 bg-blue-50 hover:bg-blue-100 rounded-2xl font-bold text-blue-600 flex items-center justify-center gap-3 transition"
+            >
+              <span>🎥</span> Grabar Historia (24h)
+            </button>
+
+            <button 
+              onClick={() => setMenuCamaraAbierto(false)}
+              className="w-full py-3 mt-2 bg-gray-200 text-gray-600 font-bold rounded-2xl text-sm"
+            >
+              Cancelar
+            </button>
           </div>
         </div>
       )}
@@ -562,8 +372,15 @@ export default function MuroEvento() {
         )}
       </main>
 
+      {/* BOTÓN "+" PRINCIPAL (Abre el menú para elegir usar la cámara oficial con linterna) */}
       <div className="fixed bottom-10 w-full flex justify-center z-20 pointer-events-none">
-        <button onClick={() => iniciarCamara('environment')} disabled={subiendo} className={`pointer-events-auto bg-blue-600 text-white w-16 h-16 rounded-full shadow-[0_10px_25px_rgba(37,99,235,0.4)] flex items-center justify-center text-4xl pb-1 hover:bg-blue-700 transition transform ${subiendo ? 'opacity-50 scale-95' : 'hover:-translate-y-1'}`}>{subiendo ? <span className="text-lg">⏳</span> : '+'}</button>
+        <button 
+          onClick={() => setMenuCamaraAbierto(true)}
+          disabled={subiendo} 
+          className={`pointer-events-auto bg-blue-600 text-white w-16 h-16 rounded-full shadow-[0_10px_25px_rgba(37,99,235,0.4)] flex items-center justify-center text-4xl pb-1 hover:bg-blue-700 transition transform ${subiendo ? 'opacity-50 scale-95' : 'hover:-translate-y-1'}`}
+        >
+          {subiendo ? <span className="text-lg">⏳</span> : '+'}
+        </button>
       </div>
     </div>
   );
