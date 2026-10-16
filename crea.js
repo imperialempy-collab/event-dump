@@ -2,26 +2,29 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
-console.log("⏳ Creando rama de prueba para la cámara nativa...");
+console.log("⏳ Paso 1: Creando respaldo en rama 'backup-antes-de-camara-nativa'...");
 
 try {
-  // 1. Aseguramos que main esté guardado
+  // Asegurarnos de estar en main y guardar cambios actuales
+  execSync('git checkout main');
   execSync('git add .');
-  try { execSync('git commit -m "Guardado antes de crear rama de prueba nativa"'); } catch(e){}
+  try { execSync('git commit -m "Respaldo previo a transicion de camara nativa"'); } catch(e){}
   execSync('git push origin main');
 
-  // 2. Creamos y nos pasamos a una rama nueva llamada 'prueba-camara-nativa'
+  // Crear la rama de respaldo en GitHub
+  const nombreBackup = 'backup-antes-de-camara-nativa';
   try {
-    execSync('git checkout -b prueba-camara-nativa');
-  } catch (e) {
-    execSync('git checkout prueba-camara-nativa');
-  }
+    execSync(`git branch ${nombreBackup}`);
+  } catch(e) {}
+  execSync(`git push origin ${nombreBackup}`, { stdio: 'inherit' });
+  console.log(`✅ Respaldo creado con éxito en la rama: '${nombreBackup}'`);
 
 } catch (err) {
-  console.log("Aviso de git:", err.message);
+  console.error("Error al crear el respaldo:", err.message);
 }
 
-// 3. Escribimos el código temporal de prueba usando inputs nativos con soporte completo de linterna y video de fábrica
+console.log("\n⏳ Paso 2: Aplicando la nueva interfaz con cámara nativa y menú desplegable...");
+
 const muroCode = `
 import { useRouter } from 'next/router';
 import { useState, useEffect, useRef } from 'react';
@@ -41,11 +44,11 @@ export default function MuroEvento() {
   const [archivos, setArchivos] = useState([]);
   const [subiendo, setSubiendo] = useState(false);
 
-  // Referencias para inputs nativos diferenciados
+  // Referencias para inputs nativos (Cámara de fábrica del celular con linterna real)
   const fotoInputRef = useRef(null);
   const videoInputRef = useRef(null);
 
-  // Estados para visores (Mantiene toda tu lógica de visualización intacta)
+  // Estados de visores
   const [historiasVistas, setHistoriasVistas] = useState([]);
   const [visorHistorias, setVisorHistorias] = useState(null);
   const [videoProgreso, setVideoProgreso] = useState(0);
@@ -57,10 +60,10 @@ export default function MuroEvento() {
   const [isSwipingMuro, setIsSwipingMuro] = useState(false);
   const muroTouchStartRef = useRef({ x: 0, y: 0, ignore: false });
 
-  // Estado para mostrar opciones de cámara flotantes
+  // Estados del Menú Desplegable y Comentarios
   const [menuCamaraAbierto, setMenuCamaraAbierto] = useState(false);
   const [comentarioTemp, setComentarioTemp] = useState('');
-  const [archivoPendiente, setArchivoPendiente] = useState(null); // { file, tipo, destino }
+  const [archivoPendiente, setArchivoPendiente] = useState(null);
   const [modalComentarioAbierto, setModalComentarioAbierto] = useState(false);
 
   useEffect(() => {
@@ -105,7 +108,7 @@ export default function MuroEvento() {
     return aVisto ? 1 : -1;
   });
 
-  // Manejador de selección de archivo nativo (Abre cámara de fábrica con linterna del celular)
+  // Manejador cuando el usuario toma la foto/video con la cámara de fábrica
   const handleFileSelected = (e, destino) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -117,7 +120,7 @@ export default function MuroEvento() {
       setArchivoPendiente({ file, tipo, destino });
       setModalComentarioAbierto(true);
     } else {
-      // Subir historia directa
+      // Las historias van directo sin comentario obligatorio
       subirArchivoFinal(file, tipo, destino, '');
     }
     e.target.value = null;
@@ -152,7 +155,7 @@ export default function MuroEvento() {
     }
   };
 
-  // --- VISORES DE HISTORIAS Y MURO (Totalmente intactos) ---
+  // --- VISORES ---
   useEffect(() => {
     if (itemActivoIndex !== null) {
       itemsMuro.forEach((item, index) => {
@@ -209,7 +212,7 @@ export default function MuroEvento() {
       if (itemActivoIndex === itemsMuro.length - 1 && diffX < 0) moveX = diffX * 0.25; 
       setMuroSwipeOffset({ x: moveX, y: 0 });
     } else if (Math.abs(diffY) > Math.abs(diffX) && Math.abs(muroSwipeOffset.x) < 10) {
-      setMuroSwipeOffset({ x: 0, y:ดินDiffY });
+      setMuroSwipeOffset({ x: 0, y: diffY });
     }
   };
   const handleMuroTouchEnd = (e) => {
@@ -229,7 +232,7 @@ export default function MuroEvento() {
   return (
     <div className="min-h-screen bg-[#f8f9fa] flex flex-col font-sans overflow-hidden relative">
       
-      {/* Inputs Nativos Ocultos para activar la cámara oficial del teléfono con linterna nativa */}
+      {/* Inputs Nativos Ocultos (Llaman a la cámara oficial del celular con flash/linterna de fábrica) */}
       <input type="file" accept="image/*" capture="environment" ref={fotoInputRef} onChange={(e) => handleFileSelected(e, 'muro')} style={{ display: 'none' }} />
       <input type="file" accept="video/*" capture="environment" ref={videoInputRef} onChange={(e) => handleFileSelected(e, 'historia')} style={{ display: 'none' }} />
 
@@ -280,7 +283,7 @@ export default function MuroEvento() {
         </div>
       )}
 
-      {/* --- MODAL DE COMENTARIO RÁPIDO ANTES DE SUBIR FOTO/VIDEO --- */}
+      {/* --- MODAL DE COMENTARIO --- */}
       {modalComentarioAbierto && (
         <div className="fixed inset-0 bg-black/80 z-[150] flex flex-col items-center justify-center p-6 backdrop-blur-md">
           <div className="w-full max-w-sm bg-white rounded-3xl p-6 shadow-2xl flex flex-col gap-4">
@@ -312,7 +315,7 @@ export default function MuroEvento() {
         </div>
       )}
 
-      {/* --- MENÚ FLOTANTE DE SELECCIÓN DE CÁMARA (Nativo con linterna) --- */}
+      {/* --- MENÚ DESPLEGABLE AL TOCAR EL BOTÓN + --- */}
       {menuCamaraAbierto && (
         <div className="fixed inset-0 bg-black/60 z-[90] flex items-end justify-center pb-24 px-6 backdrop-blur-sm animate-fade-in" onClick={() => setMenuCamaraAbierto(false)}>
           <div className="w-full max-w-xs bg-white rounded-3xl p-4 shadow-2xl flex flex-col gap-2" onClick={(e) => e.stopPropagation()}>
@@ -320,14 +323,14 @@ export default function MuroEvento() {
             
             <button 
               onClick={() => fotoInputRef.current.click()}
-              className="w-full py-4 bg-gray-50 hover:bg-gray-100 rounded-2xl font-bold text-gray-800 flex items-center justify-center gap-3 transition"
+              className="w-full py-4 bg-gray-50 hover:bg-gray-100 rounded-2xl font-bold text-gray-800 flex items-center justify-center gap-3 transition shadow-sm"
             >
               <span>📷</span> Sacar Foto (Muro)
             </button>
             
             <button 
               onClick={() => videoInputRef.current.click()}
-              className="w-full py-4 bg-blue-50 hover:bg-blue-100 rounded-2xl font-bold text-blue-600 flex items-center justify-center gap-3 transition"
+              className="w-full py-4 bg-blue-50 hover:bg-blue-100 rounded-2xl font-bold text-blue-600 flex items-center justify-center gap-3 transition shadow-sm"
             >
               <span>🎥</span> Grabar Historia (24h)
             </button>
@@ -397,7 +400,7 @@ export default function MuroEvento() {
         )}
       </main>
 
-      {/* BOTÓN "+" PRINCIPAL (Abre el menú para elegir usar la cámara oficial con linterna) */}
+      {/* BOTÓN "+" PRINCIPAL (Despliega el menú de opciones para usar la cámara nativa) */}
       <div className="fixed bottom-10 w-full flex justify-center z-20 pointer-events-none">
         <button 
           onClick={() => setMenuCamaraAbierto(true)}
@@ -414,10 +417,10 @@ export default function MuroEvento() {
 
 fs.writeFileSync(path.join(__dirname, 'src/pages/[albumId]/index.js'), muroCode.trim());
 
-console.log("✅ Creada rama 'prueba-camara-nativa' y aplicado con éxito. Subiendo a GitHub...");
+console.log("⏳ Paso 3: Subiendo cambios a la rama principal (main)...");
 try {
-  execSync('git add . && git commit -m "Implementada prueba con camara nativa del sistema para garantizar linterna y video" && git push origin prueba-camara-nativa', { stdio: 'inherit' });
-  console.log("🚀 ¡Prueba subida a la rama 'prueba-camara-nativa'! Vercel la está desplegando.");
+  execSync('git add . && git commit -m "Activado menu desplegable para camara nativa del sistema con flash garantizado" && git push origin main', { stdio: 'inherit' });
+  console.log("🚀 ¡Todo listo y subido! Espera unos 20-30 segundos a que Vercel actualice tu enlace.");
 } catch (err) {
-  console.error("Error en git:", err);
+  console.error("Error al subir a Git:", err);
 }
