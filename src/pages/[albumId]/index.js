@@ -17,12 +17,9 @@ export default function MuroEvento() {
   const [subiendo, setSubiendo] = useState(false);
   const [progresoSubida, setProgresoSubida] = useState('');
 
-  // Selector de archivos múltiple desde galería
   const galleryInputRef = useRef(null);
-
-  // Estados de procesamiento por lote (Lote de archivos seleccionados)
-  const [loteArchivos, setLoteArchivos] = useState([]); // [{ id, file, previewUrl, tipo, destino ('muro'|'historia'), comentario, recortado: {start, end} }]
-  const [archivoEditandoIndex, setArchivoEditandoIndex] = useState(null); // Índice del archivo que se está recortando/configurando
+  const [loteArchivos, setLoteArchivos] = useState([]); 
+  const [archivoEditandoIndex, setArchivoEditandoIndex] = useState(null);
 
   // Estados de visores
   const [historiasVistas, setHistoriasVistas] = useState([]);
@@ -63,14 +60,12 @@ export default function MuroEvento() {
 
   const getTime = (item) => item.creadoEn?.toMillis ? item.creadoEn.toMillis() : (item.creadoEn ? new Date(item.creadoEn).getTime() : 0);
 
-  // REGLA DE ORO DE 5 DÍAS: Todo se borra estrictamente a los 5 días de la fecha del evento
   const archivosValidos = archivos.filter(a => (Date.now() - 5 * 24 * 60 * 60 * 1000) < getTime(a));
-  
   const itemsMuro = archivosValidos.filter(a => a.tipo === 'imagen' || a.destino === 'muro');
   
   const historias = archivosValidos.filter(a => {
     if (a.tipo !== 'video' || a.destino === 'muro') return false;
-    return getTime(a) > (Date.now() - 5 * 24 * 60 * 60 * 1000); // Riguroso 5 días también
+    return getTime(a) > (Date.now() - 5 * 24 * 60 * 60 * 1000);
   });
 
   const historiasOrdenadas = [...historias].sort((a, b) => {
@@ -80,7 +75,6 @@ export default function MuroEvento() {
     return aVisto ? 1 : -1;
   });
 
-  // --- SELECCIÓN MÚLTIPLE DESDE GALERÍA ---
   const handleGalleryFilesSelected = (e) => {
     const files = Array.from(e.target.files);
     if (files.length === 0) return;
@@ -92,14 +86,13 @@ export default function MuroEvento() {
         file,
         previewUrl: URL.createObjectURL(file),
         tipo,
-        destino: 'muro', // Por defecto van al muro
-        comentario: '',
-        corte: { start: 0, duration: tipo === 'video' ? 20 : 0 }
+        destino: 'muro',
+        comentario: ''
       };
     });
 
     setLoteArchivos(nuevosItems);
-    setArchivoEditandoIndex(0); // Abre el primero para configurar
+    setArchivoEditandoIndex(0);
     e.target.value = null;
   };
 
@@ -120,18 +113,15 @@ export default function MuroEvento() {
     }
   };
 
-  // --- COMPRESIÓN INTELIGENTE EN CLIENTE Y SUBIDA A FIREBASE ---
   const procesarYSubirLote = async () => {
     setSubiendo(true);
     try {
       let total = loteArchivos.length;
       for (let i = 0; i < total; i++) {
         const item = loteArchivos[i];
-        setProgresoSubida(`Subiendo archivo ${i + 1} de ${total}...`);
+        setProgresoSubida(total === 1 ? 'Publicando...' : `Subiendo ${i + 1} de ${total}...`);
 
         let archivoFinal = item.file;
-
-        // Compresión y optimización ligera de imágenes
         if (item.tipo === 'imagen') {
           archivoFinal = await comprimirImagen(item.file);
         }
@@ -155,7 +145,6 @@ export default function MuroEvento() {
 
       setLoteArchivos([]);
       setArchivoEditandoIndex(null);
-      alert("¡Archivos subidos exitosamente!");
     } catch (error) {
       console.error(error);
       alert("Hubo un error al subir los archivos.");
@@ -165,7 +154,6 @@ export default function MuroEvento() {
     }
   };
 
-  // Compresor ultrarrápido de imágenes para ahorrar datos y espacio
   const comprimirImagen = (file) => {
     return new Promise((resolve) => {
       const reader = new FileReader();
@@ -177,7 +165,7 @@ export default function MuroEvento() {
           const canvas = document.createElement('canvas');
           let width = img.width;
           let height = img.height;
-          const maxSize = 1600; // Máximo estándar web nítido
+          const maxSize = 1600;
 
           if (width > height && width > maxSize) {
             height *= maxSize / width;
@@ -194,13 +182,13 @@ export default function MuroEvento() {
 
           canvas.toBlob((blob) => {
             resolve(new File([blob], file.name, { type: 'image/jpeg', lastModified: Date.now() }));
-          }, 'image/jpeg', 0.82); // 82% de calidad visual perfecta con peso mínimo
+          }, 'image/jpeg', 0.82);
         };
       };
     });
   };
 
-  // --- VISORES DE HISTORIAS Y MURO ---
+  // --- VISORES ---
   useEffect(() => {
     if (itemActivoIndex !== null) {
       itemsMuro.forEach((item, index) => {
@@ -277,7 +265,6 @@ export default function MuroEvento() {
   return (
     <div className="min-h-screen bg-[#f8f9fa] flex flex-col font-sans overflow-hidden relative">
       
-      {/* Input de galería múltiple oculto */}
       <input 
         type="file" 
         accept="image/*,video/*" 
@@ -287,35 +274,38 @@ export default function MuroEvento() {
         style={{ display: 'none' }} 
       />
 
-      {/* --- MODAL / ASISTENTE DE CONFIGURACIÓN DE LOTE (Recorte, Comentario y Destino) --- */}
+      {/* --- PANTALLA DE REVISIÓN Y CONFIGURACIÓN (Estilo Red Social / Premium) --- */}
       {loteArchivos.length > 0 && archivoEditandoIndex !== null && (
-        <div className="fixed inset-0 bg-black/90 z-[150] flex flex-col justify-between p-6 backdrop-blur-md">
-          {/* Cabecera del Asistente */}
-          <div className="flex justify-between items-center text-white">
-            <span className="text-xs font-bold uppercase tracking-widest opacity-80">
-              Configurando archivo {archivoEditandoIndex + 1} de {loteArchivos.length}
+        <div className="fixed inset-0 bg-black z-[150] flex flex-col justify-between p-5 md:p-8 animate-fade-in">
+          
+          {/* Barra Superior */}
+          <div className="flex justify-between items-center text-white pb-2 border-b border-white/10">
+            <button 
+              onClick={() => { setLoteArchivos([]); setArchivoEditandoIndex(null); }}
+              className="text-sm font-medium text-zinc-400 hover:text-white transition"
+            >
+              Cancelar
+            </button>
+            <span className="text-xs font-semibold tracking-wider uppercase text-zinc-300">
+              {loteArchivos.length === 1 ? 'Nueva publicación' : `Archivo ${archivoEditandoIndex + 1} de ${loteArchivos.length}`}
             </span>
             <button 
               onClick={() => eliminarItemDelLote(archivoEditandoIndex)}
-              className="text-xs text-red-400 font-bold px-3 py-1.5 bg-red-500/20 rounded-full"
+              className="text-xs text-red-400 font-medium hover:text-red-300 transition"
             >
-              Eliminar este
+              Eliminar
             </button>
           </div>
 
-          {/* Vista Previa del Archivo Actual */}
-          <div className="flex-1 my-4 flex items-center justify-center relative overflow-hidden rounded-2xl bg-black">
+          {/* Contenedor de Medios (Limpio, sin carteles molestos) */}
+          <div className="flex-1 my-3 flex items-center justify-center relative overflow-hidden rounded-2xl bg-[#0a0a0a]">
             {loteArchivos[archivoEditandoIndex].tipo === 'video' ? (
-              <div className="w-full h-full flex flex-col items-center justify-center relative">
-                <video 
-                  src={loteArchivos[archivoEditandoIndex].previewUrl} 
-                  controls 
-                  className="max-h-full max-w-full object-contain" 
-                />
-                <div className="absolute bottom-4 bg-black/60 px-4 py-2 rounded-xl backdrop-blur-md text-white text-xs">
-                  ✂️ Recorte activo: Máx {loteArchivos[archivoEditandoIndex].destino === 'historia' ? '10 segundos (Historia)' : '20 segundos (Muro)'}
-                </div>
-              </div>
+              <video 
+                src={loteArchivos[archivoEditandoIndex].previewUrl} 
+                controls 
+                playsInline
+                className="max-h-full max-w-full object-contain" 
+              />
             ) : (
               <img 
                 src={loteArchivos[archivoEditandoIndex].previewUrl} 
@@ -325,62 +315,81 @@ export default function MuroEvento() {
             )}
           </div>
 
-          {/* Opciones de Configuración */}
-          <div className="bg-zinc-900 border border-white/10 rounded-3xl p-5 flex flex-col gap-4">
+          {/* Mini Carrusel inferior si seleccionó varios archivos */}
+          {loteArchivos.length > 1 && (
+            <div className="flex gap-2 overflow-x-auto py-2 [&::-webkit-scrollbar]:hidden">
+              {loteArchivos.map((item, idx) => (
+                <button
+                  key={item.id}
+                  onClick={() => setArchivoEditandoIndex(idx)}
+                  className={`relative w-14 h-14 rounded-xl overflow-hidden flex-shrink-0 border-2 transition ${idx === archivoEditandoIndex ? 'border-blue-500 scale-105' : 'border-transparent opacity-50'}`}
+                >
+                  {item.tipo === 'video' ? (
+                    <video src={item.previewUrl} className="w-full h-full object-cover" />
+                  ) : (
+                    <img src={item.previewUrl} className="w-full h-full object-cover" />
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Controles de Configuración Limpios */}
+          <div className="bg-[#121214] border border-white/10 rounded-3xl p-5 flex flex-col gap-4 shadow-2xl">
             
-            {/* Selector de Destino */}
-            <div className="flex bg-zinc-800 p-1 rounded-2xl">
+            {/* Selector de Destino Minimalista */}
+            <div className="flex bg-[#222226] p-1 rounded-2xl">
               <button 
                 onClick={() => actualizarItemActual('destino', 'muro')}
-                className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition ${loteArchivos[archivoEditandoIndex].destino === 'muro' ? 'bg-blue-600 text-white shadow-md' : 'text-zinc-400'}`}
+                className={`flex-1 py-3 rounded-xl text-xs font-bold tracking-wide transition ${loteArchivos[archivoEditandoIndex].destino === 'muro' ? 'bg-white text-black shadow-md' : 'text-zinc-400 hover:text-white'}`}
               >
-                Muro (hasta 20s)
+                Muro
               </button>
               <button 
                 onClick={() => actualizarItemActual('destino', 'historia')}
-                className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition ${loteArchivos[archivoEditandoIndex].destino === 'historia' ? 'bg-blue-600 text-white shadow-md' : 'text-zinc-400'}`}
+                className={`flex-1 py-3 rounded-xl text-xs font-bold tracking-wide transition ${loteArchivos[archivoEditandoIndex].destino === 'historia' ? 'bg-white text-black shadow-md' : 'text-zinc-400 hover:text-white'}`}
               >
-                Historia (10s - 5 días)
+                Historia
               </button>
             </div>
 
-            {/* Comentario (Solo si va al muro o es foto) */}
+            {/* Input de Comentario Elegante */}
             <input 
               type="text" 
               placeholder="Escribe un comentario..." 
               value={loteArchivos[archivoEditandoIndex].comentario} 
               onChange={(e) => actualizarItemActual('comentario', e.target.value)}
-              className="w-full bg-zinc-800 text-white placeholder-zinc-500 px-4 py-3.5 rounded-2xl outline-none border border-zinc-700 text-sm"
+              className="w-full bg-[#1c1c21] text-white placeholder-zinc-500 px-4 py-3.5 rounded-2xl outline-none border border-transparent focus:border-zinc-700 text-sm font-light transition"
             />
 
-            {/* Botones de Navegación del Lote */}
+            {/* Botón de Acción Principal */}
             <div className="flex gap-3 pt-1">
-              {archivoEditandoIndex > 0 && (
-                <button 
-                  onClick={() => setArchivoEditandoIndex(archivoEditandoIndex - 1)}
-                  className="py-3.5 px-5 bg-zinc-800 text-white font-bold rounded-2xl text-sm"
-                >
-                  ← Anterior
-                </button>
-              )}
-
               {archivoEditandoIndex < loteArchivos.length - 1 ? (
-                <button 
-                  onClick={() => setArchivoEditandoIndex(archivoEditandoIndex + 1)}
-                  className="flex-1 py-3.5 bg-blue-600 text-white font-bold rounded-2xl text-sm shadow-lg"
-                >
-                  Siguiente archivo →
-                </button>
+                <>
+                  <button 
+                    onClick={() => setArchivoEditandoIndex(archivoEditandoIndex + 1)}
+                    className="flex-1 py-3.5 bg-zinc-800 text-white font-bold rounded-2xl text-sm hover:bg-zinc-700 transition"
+                  >
+                    Siguiente ({archivoEditandoIndex + 1}/{loteArchivos.length})
+                  </button>
+                  <button 
+                    onClick={procesarYSubirLote}
+                    disabled={subiendo}
+                    className="flex-1 py-3.5 bg-blue-600 text-white font-bold rounded-2xl text-sm shadow-lg hover:bg-blue-500 transition flex items-center justify-center gap-2"
+                  >
+                    {subiendo ? <span>⏳ {progresoSubida}</span> : <span>Publicar todo ({loteArchivos.length})</span>}
+                  </button>
+                </>
               ) : (
                 <button 
                   onClick={procesarYSubirLote}
                   disabled={subiendo}
-                  className="flex-1 py-3.5 bg-green-600 text-white font-bold rounded-2xl text-sm shadow-lg flex items-center justify-center gap-2"
+                  className="w-full py-4 bg-blue-600 text-white font-bold rounded-2xl text-sm shadow-lg hover:bg-blue-500 transition flex items-center justify-center gap-2"
                 >
                   {subiendo ? (
                     <><span>⏳</span> {progresoSubida}</>
                   ) : (
-                    <>🚀 Publicar todo ({loteArchivos.length})</>
+                    <span>{loteArchivos.length === 1 ? 'Publicar' : `Publicar todo (${loteArchivos.length})`}</span>
                   )}
                 </button>
               )}
@@ -491,13 +500,12 @@ export default function MuroEvento() {
         )}
       </main>
 
-      {/* BOTÓN "+" PRINCIPAL (Abre directo la galería múltiple) */}
+      {/* BOTÓN "+" PRINCIPAL */}
       <div className="fixed bottom-10 w-full flex justify-center z-20 pointer-events-none">
         <button 
           onClick={() => galleryInputRef.current.click()}
           disabled={subiendo} 
-          className={`pointer-events-auto bg-blue-600 text-white w-16 h-16 rounded-full shadow-[0_10px_25px_rgba(37,99,235,0.4)] flex items-center justify-center text-4xl pb-1 hover:bg-blue-700 transition transform ${subiendo ? 'opacity-50 scale-95' : 'hover:-translate-y-1'}`}
-        >
+          className={`pointer-events-auto bg-blue-600 text-white w-16 h-16 rounded-full shadow-[0_10px_25px_rgba(37,99,235,0.4)] flex items-center justify-center text-4xl pb-1 hover:bg-blue-700 transition transform ${subiendo ? 'opacity-50 scale-95' : 'hover:-translate-y-1'}`}>
           {subiendo ? <span className="text-lg">⏳</span> : '+'}
         </button>
       </div>
