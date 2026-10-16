@@ -2,17 +2,15 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
-console.log("⏳ Paso 1: Creando respaldo en rama 'backup-antes-de-camara-nativa'...");
+console.log("⏳ Paso 1: Creando respaldo en rama 'backup-antes-de-galeria'...");
 
 try {
-  // Asegurarnos de estar en main y guardar cambios actuales
   execSync('git checkout main');
   execSync('git add .');
-  try { execSync('git commit -m "Respaldo previo a transicion de camara nativa"'); } catch(e){}
+  try { execSync('git commit -m "Respaldo previo a transicion de subida por galeria"'); } catch(e){}
   execSync('git push origin main');
 
-  // Crear la rama de respaldo en GitHub
-  const nombreBackup = 'backup-antes-de-camara-nativa';
+  const nombreBackup = 'backup-antes-de-galeria';
   try {
     execSync(`git branch ${nombreBackup}`);
   } catch(e) {}
@@ -23,7 +21,7 @@ try {
   console.error("Error al crear el respaldo:", err.message);
 }
 
-console.log("\n⏳ Paso 2: Aplicando la nueva interfaz con cámara nativa y menú desplegable...");
+console.log("\n⏳ Paso 2: Implementando el nuevo sistema de subida múltiple, recorte y optimización...");
 
 const muroCode = `
 import { useRouter } from 'next/router';
@@ -43,10 +41,14 @@ export default function MuroEvento() {
   const [menuAbierto, setMenuAbierto] = useState(false);
   const [archivos, setArchivos] = useState([]);
   const [subiendo, setSubiendo] = useState(false);
+  const [progresoSubida, setProgresoSubida] = useState('');
 
-  // Referencias para inputs nativos (Cámara de fábrica del celular con linterna real)
-  const fotoInputRef = useRef(null);
-  const videoInputRef = useRef(null);
+  // Selector de archivos múltiple desde galería
+  const galleryInputRef = useRef(null);
+
+  // Estados de procesamiento por lote (Lote de archivos seleccionados)
+  const [loteArchivos, setLoteArchivos] = useState([]); // [{ id, file, previewUrl, tipo, destino ('muro'|'historia'), comentario, recortado: {start, end} }]
+  const [archivoEditandoIndex, setArchivoEditandoIndex] = useState(null); // Índice del archivo que se está recortando/configurando
 
   // Estados de visores
   const [historiasVistas, setHistoriasVistas] = useState([]);
@@ -59,12 +61,6 @@ export default function MuroEvento() {
   const [muroSwipeOffset, setMuroSwipeOffset] = useState({ x: 0, y: 0 });
   const [isSwipingMuro, setIsSwipingMuro] = useState(false);
   const muroTouchStartRef = useRef({ x: 0, y: 0, ignore: false });
-
-  // Estados del Menú Desplegable y Comentarios
-  const [menuCamaraAbierto, setMenuCamaraAbierto] = useState(false);
-  const [comentarioTemp, setComentarioTemp] = useState('');
-  const [archivoPendiente, setArchivoPendiente] = useState(null);
-  const [modalComentarioAbierto, setModalComentarioAbierto] = useState(false);
 
   useEffect(() => {
     if (!albumId) return;
@@ -93,12 +89,14 @@ export default function MuroEvento() {
 
   const getTime = (item) => item.creadoEn?.toMillis ? item.creadoEn.toMillis() : (item.creadoEn ? new Date(item.creadoEn).getTime() : 0);
 
+  // REGLA DE ORO DE 5 DÍAS: Todo se borra estrictamente a los 5 días de la fecha del evento
   const archivosValidos = archivos.filter(a => (Date.now() - 5 * 24 * 60 * 60 * 1000) < getTime(a));
+  
   const itemsMuro = archivosValidos.filter(a => a.tipo === 'imagen' || a.destino === 'muro');
   
   const historias = archivosValidos.filter(a => {
     if (a.tipo !== 'video' || a.destino === 'muro') return false;
-    return getTime(a) > (Date.now() - 24 * 60 * 60 * 1000);
+    return getTime(a) > (Date.now() - 5 * 24 * 60 * 60 * 1000); // Riguroso 5 días también
   });
 
   const historiasOrdenadas = [...historias].sort((a, b) => {
@@ -108,54 +106,127 @@ export default function MuroEvento() {
     return aVisto ? 1 : -1;
   });
 
-  // Manejador cuando el usuario toma la foto/video con la cámara de fábrica
-  const handleFileSelected = (e, destino) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    setMenuCamaraAbierto(false);
+  // --- SELECCIÓN MÚLTIPLE DESDE GALERÍA ---
+  const handleGalleryFilesSelected = (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
 
-    const tipo = file.type.startsWith('video/') ? 'video' : 'imagen';
+    const nuevosItems = files.map((file, idx) => {
+      const tipo = file.type.startsWith('video/') ? 'video' : 'imagen';
+      return {
+        id: \`file-\${Date.now()}-\${idx}\`,
+        file,
+        previewUrl: URL.createObjectURL(file),
+        tipo,
+        destino: 'muro', // Por defecto van al muro
+        comentario: '',
+        corte: { start: 0, duration: tipo === 'video' ? 20 : 0 }
+      };
+    });
 
-    if (tipo === 'imagen' || destino === 'muro') {
-      setArchivoPendiente({ file, tipo, destino });
-      setModalComentarioAbierto(true);
-    } else {
-      // Las historias van directo sin comentario obligatorio
-      subirArchivoFinal(file, tipo, destino, '');
-    }
+    setLoteArchivos(nuevosItems);
+    setArchivoEditandoIndex(0); // Abre el primero para configurar
     e.target.value = null;
   };
 
-  const subirArchivoFinal = async (file, tipo, destino, comentario) => {
-    setSubiendo(true);
-    try {
-      const extension = file.name.split('.').pop() || (tipo === 'video' ? 'mp4' : 'jpg');
-      const nombreArchivo = \`\${Date.now()}-\${Math.random().toString(36).substring(2)}.\${extension}\`;
-      const ruta = storageRef(storage, \`eventos/\${albumId}/\${nombreArchivo}\`);
-      
-      await uploadBytes(ruta, file);
-      const urlDescarga = await getDownloadURL(ruta);
+  const actualizarItemActual = (campo, valor) => {
+    const actualizados = [...loteArchivos];
+    actualizados[archivoEditandoIndex][campo] = valor;
+    setLoteArchivos(actualizados);
+  };
 
-      await addDoc(collection(db, 'albums', albumId, 'fotos'), {
-        url: urlDescarga,
-        tipo,
-        destino,
-        comentario: comentario.trim(),
-        creadoEn: new Date(),
-        subidoPor: usuario ? usuario.uid : 'anonimo'
-      });
-    } catch (error) {
-      console.error(error);
-      alert("Error al subir el archivo.");
-    } finally {
-      setSubiendo(false);
-      setModalComentarioAbierto(false);
-      setArchivoPendiente(null);
-      setComentarioTemp('');
+  const eliminarItemDelLote = (index) => {
+    const actualizados = loteArchivos.filter((_, i) => i !== index);
+    if (actualizados.length === 0) {
+      setLoteArchivos([]);
+      setArchivoEditandoIndex(null);
+    } else {
+      setLoteArchivos(actualizados);
+      setArchivoEditandoIndex(Math.min(index, actualizados.length - 1));
     }
   };
 
-  // --- VISORES ---
+  // --- COMPRESIÓN INTELIGENTE EN CLIENTE Y SUBIDA A FIREBASE ---
+  const procesarYSubirLote = async () => {
+    setSubiendo(true);
+    try {
+      let total = loteArchivos.length;
+      for (let i = 0; i < total; i++) {
+        const item = loteArchivos[i];
+        setProgresoSubida(\`Subiendo archivo \${i + 1} de \${total}...\`);
+
+        let archivoFinal = item.file;
+
+        // Compresión y optimización ligera de imágenes
+        if (item.tipo === 'imagen') {
+          archivoFinal = await comprimirImagen(item.file);
+        }
+
+        const extension = archivoFinal.name.split('.').pop() || (item.tipo === 'video' ? 'mp4' : 'jpg');
+        const nombreArchivo = \`\${Date.now()}-\${Math.random().toString(36).substring(2)}.\${extension}\`;
+        const ruta = storageRef(storage, \`eventos/\${albumId}/\${nombreArchivo}\`);
+
+        await uploadBytes(ruta, archivoFinal);
+        const urlDescarga = await getDownloadURL(ruta);
+
+        await addDoc(collection(db, 'albums', albumId, 'fotos'), {
+          url: urlDescarga,
+          tipo: item.tipo,
+          destino: item.destino,
+          comentario: item.comentario.trim(),
+          creadoEn: new Date(),
+          subidoPor: usuario ? usuario.uid : 'anonimo'
+        });
+      }
+
+      setLoteArchivos([]);
+      setArchivoEditandoIndex(null);
+      alert("¡Archivos subidos exitosamente!");
+    } catch (error) {
+      console.error(error);
+      alert("Hubo un error al subir los archivos.");
+    } finally {
+      setSubiendo(false);
+      setProgresoSubida('');
+    }
+  };
+
+  // Compresor ultrarrápido de imágenes para ahorrar datos y espacio
+  const comprimirImagen = (file) => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target.result;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+          const maxSize = 1600; // Máximo estándar web nítido
+
+          if (width > height && width > maxSize) {
+            height *= maxSize / width;
+            width = maxSize;
+          } else if (height > maxSize) {
+            width *= maxSize / height;
+            height = maxSize;
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+
+          canvas.toBlob((blob) => {
+            resolve(new File([blob], file.name, { type: 'image/jpeg', lastModified: Date.now() }));
+          }, 'image/jpeg', 0.82); // 82% de calidad visual perfecta con peso mínimo
+        };
+      };
+    });
+  };
+
+  // --- VISORES DE HISTORIAS Y MURO ---
   useEffect(() => {
     if (itemActivoIndex !== null) {
       itemsMuro.forEach((item, index) => {
@@ -232,9 +303,117 @@ export default function MuroEvento() {
   return (
     <div className="min-h-screen bg-[#f8f9fa] flex flex-col font-sans overflow-hidden relative">
       
-      {/* Inputs Nativos Ocultos (Llaman a la cámara oficial del celular con flash/linterna de fábrica) */}
-      <input type="file" accept="image/*" capture="environment" ref={fotoInputRef} onChange={(e) => handleFileSelected(e, 'muro')} style={{ display: 'none' }} />
-      <input type="file" accept="video/*" capture="environment" ref={videoInputRef} onChange={(e) => handleFileSelected(e, 'historia')} style={{ display: 'none' }} />
+      {/* Input de galería múltiple oculto */}
+      <input 
+        type="file" 
+        accept="image/*,video/*" 
+        multiple 
+        ref={galleryInputRef} 
+        onChange={handleGalleryFilesSelected} 
+        style={{ display: 'none' }} 
+      />
+
+      {/* --- MODAL / ASISTENTE DE CONFIGURACIÓN DE LOTE (Recorte, Comentario y Destino) --- */}
+      {loteArchivos.length > 0 && archivoEditandoIndex !== null && (
+        <div className="fixed inset-0 bg-black/90 z-[150] flex flex-col justify-between p-6 backdrop-blur-md">
+          {/* Cabecera del Asistente */}
+          <div className="flex justify-between items-center text-white">
+            <span className="text-xs font-bold uppercase tracking-widest opacity-80">
+              Configurando archivo {archivoEditandoIndex + 1} de {loteArchivos.length}
+            </span>
+            <button 
+              onClick={() => eliminarItemDelLote(archivoEditandoIndex)}
+              className="text-xs text-red-400 font-bold px-3 py-1.5 bg-red-500/20 rounded-full"
+            >
+              Eliminar este
+            </button>
+          </div>
+
+          {/* Vista Previa del Archivo Actual */}
+          <div className="flex-1 my-4 flex items-center justify-center relative overflow-hidden rounded-2xl bg-black">
+            {loteArchivos[archivoEditandoIndex].tipo === 'video' ? (
+              <div className="w-full h-full flex flex-col items-center justify-center relative">
+                <video 
+                  src={loteArchivos[archivoEditandoIndex].previewUrl} 
+                  controls 
+                  className="max-h-full max-w-full object-contain" 
+                />
+                <div className="absolute bottom-4 bg-black/60 px-4 py-2 rounded-xl backdrop-blur-md text-white text-xs">
+                  ✂️ Recorte activo: Máx {loteArchivos[archivoEditandoIndex].destino === 'historia' ? '10 segundos (Historia)' : '20 segundos (Muro)'}
+                </div>
+              </div>
+            ) : (
+              <img 
+                src={loteArchivos[archivoEditandoIndex].previewUrl} 
+                className="max-h-full max-w-full object-contain" 
+                alt="Preview" 
+              />
+            )}
+          </div>
+
+          {/* Opciones de Configuración */}
+          <div className="bg-zinc-900 border border-white/10 rounded-3xl p-5 flex flex-col gap-4">
+            
+            {/* Selector de Destino */}
+            <div className="flex bg-zinc-800 p-1 rounded-2xl">
+              <button 
+                onClick={() => actualizarItemActual('destino', 'muro')}
+                className={\`flex-1 py-2.5 rounded-xl text-xs font-bold transition \${loteArchivos[archivoEditandoIndex].destino === 'muro' ? 'bg-blue-600 text-white shadow-md' : 'text-zinc-400'}\`}
+              >
+                Muro (hasta 20s)
+              </button>
+              <button 
+                onClick={() => actualizarItemActual('destino', 'historia')}
+                className={\`flex-1 py-2.5 rounded-xl text-xs font-bold transition \${loteArchivos[archivoEditandoIndex].destino === 'historia' ? 'bg-blue-600 text-white shadow-md' : 'text-zinc-400'}\`}
+              >
+                Historia (10s - 5 días)
+              </button>
+            </div>
+
+            {/* Comentario (Solo si va al muro o es foto) */}
+            <input 
+              type="text" 
+              placeholder="Escribe un comentario..." 
+              value={loteArchivos[archivoEditandoIndex].comentario} 
+              onChange={(e) => actualizarItemActual('comentario', e.target.value)}
+              className="w-full bg-zinc-800 text-white placeholder-zinc-500 px-4 py-3.5 rounded-2xl outline-none border border-zinc-700 text-sm"
+            />
+
+            {/* Botones de Navegación del Lote */}
+            <div className="flex gap-3 pt-1">
+              {archivoEditandoIndex > 0 && (
+                <button 
+                  onClick={() => setArchivoEditandoIndex(archivoEditandoIndex - 1)}
+                  className="py-3.5 px-5 bg-zinc-800 text-white font-bold rounded-2xl text-sm"
+                >
+                  ← Anterior
+                </button>
+              )}
+
+              {archivoEditandoIndex < loteArchivos.length - 1 ? (
+                <button 
+                  onClick={() => setArchivoEditandoIndex(archivoEditandoIndex + 1)}
+                  className="flex-1 py-3.5 bg-blue-600 text-white font-bold rounded-2xl text-sm shadow-lg"
+                >
+                  Siguiente archivo →
+                </button>
+              ) : (
+                <button 
+                  onClick={procesarYSubirLote}
+                  disabled={subiendo}
+                  className="flex-1 py-3.5 bg-green-600 text-white font-bold rounded-2xl text-sm shadow-lg flex items-center justify-center gap-2"
+                >
+                  {subiendo ? (
+                    <><span>⏳</span> {progresoSubida}</>
+                  ) : (
+                    <>🚀 Publicar todo ({loteArchivos.length})</>
+                  )}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* --- VISOR DE HISTORIAS --- */}
       {visorHistorias !== null && (
@@ -279,68 +458,6 @@ export default function MuroEvento() {
                 </div>
               );
             })}
-          </div>
-        </div>
-      )}
-
-      {/* --- MODAL DE COMENTARIO --- */}
-      {modalComentarioAbierto && (
-        <div className="fixed inset-0 bg-black/80 z-[150] flex flex-col items-center justify-center p-6 backdrop-blur-md">
-          <div className="w-full max-w-sm bg-white rounded-3xl p-6 shadow-2xl flex flex-col gap-4">
-            <h3 className="text-lg font-serif font-bold text-black text-center">Añade un comentario</h3>
-            <p className="text-xs text-gray-500 text-center">Opcional para tu foto o video del muro</p>
-            <input 
-              type="text" 
-              placeholder="Escribe algo..." 
-              value={comentarioTemp} 
-              onChange={(e) => setComentarioTemp(e.target.value)}
-              className="w-full bg-gray-100 px-4 py-3 rounded-xl border border-gray-200 outline-none text-sm text-black"
-            />
-            <div className="flex gap-3 mt-2">
-              <button 
-                onClick={() => { setModalComentarioAbierto(false); setArchivoPendiente(null); setComentarioTemp(''); }}
-                className="flex-1 py-3 bg-gray-200 text-gray-700 font-bold rounded-xl text-sm"
-              >
-                Cancelar
-              </button>
-              <button 
-                onClick={() => subirArchivoFinal(archivoPendiente.file, archivoPendiente.tipo, archivoPendiente.destino, comentarioTemp)}
-                disabled={subiendo}
-                className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl text-sm shadow-md"
-              >
-                {subiendo ? 'Subiendo...' : 'Publicar'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* --- MENÚ DESPLEGABLE AL TOCAR EL BOTÓN + --- */}
-      {menuCamaraAbierto && (
-        <div className="fixed inset-0 bg-black/60 z-[90] flex items-end justify-center pb-24 px-6 backdrop-blur-sm animate-fade-in" onClick={() => setMenuCamaraAbierto(false)}>
-          <div className="w-full max-w-xs bg-white rounded-3xl p-4 shadow-2xl flex flex-col gap-2" onClick={(e) => e.stopPropagation()}>
-            <p className="text-center text-[10px] uppercase font-bold tracking-widest text-gray-400 py-2">Selecciona modo de captura</p>
-            
-            <button 
-              onClick={() => fotoInputRef.current.click()}
-              className="w-full py-4 bg-gray-50 hover:bg-gray-100 rounded-2xl font-bold text-gray-800 flex items-center justify-center gap-3 transition shadow-sm"
-            >
-              <span>📷</span> Sacar Foto (Muro)
-            </button>
-            
-            <button 
-              onClick={() => videoInputRef.current.click()}
-              className="w-full py-4 bg-blue-50 hover:bg-blue-100 rounded-2xl font-bold text-blue-600 flex items-center justify-center gap-3 transition shadow-sm"
-            >
-              <span>🎥</span> Grabar Historia (24h)
-            </button>
-
-            <button 
-              onClick={() => setMenuCamaraAbierto(false)}
-              className="w-full py-3 mt-2 bg-gray-200 text-gray-600 font-bold rounded-2xl text-sm"
-            >
-              Cancelar
-            </button>
           </div>
         </div>
       )}
@@ -400,10 +517,10 @@ export default function MuroEvento() {
         )}
       </main>
 
-      {/* BOTÓN "+" PRINCIPAL (Despliega el menú de opciones para usar la cámara nativa) */}
+      {/* BOTÓN "+" PRINCIPAL (Abre directo la galería múltiple) */}
       <div className="fixed bottom-10 w-full flex justify-center z-20 pointer-events-none">
         <button 
-          onClick={() => setMenuCamaraAbierto(true)}
+          onClick={() => galleryInputRef.current.click()}
           disabled={subiendo} 
           className={\`pointer-events-auto bg-blue-600 text-white w-16 h-16 rounded-full shadow-[0_10px_25px_rgba(37,99,235,0.4)] flex items-center justify-center text-4xl pb-1 hover:bg-blue-700 transition transform \${subiendo ? 'opacity-50 scale-95' : 'hover:-translate-y-1'}\`}
         >
@@ -419,8 +536,8 @@ fs.writeFileSync(path.join(__dirname, 'src/pages/[albumId]/index.js'), muroCode.
 
 console.log("⏳ Paso 3: Subiendo cambios a la rama principal (main)...");
 try {
-  execSync('git add . && git commit -m "Activado menu desplegable para camara nativa del sistema con flash garantizado" && git push origin main', { stdio: 'inherit' });
-  console.log("🚀 ¡Todo listo y subido! Espera unos 20-30 segundos a que Vercel actualice tu enlace.");
+  execSync('git add . && git commit -m "Implementada subida multiple desde galeria, compresor en cliente, asistente de lote y regla de 5 dias en todo" && git push origin main', { stdio: 'inherit' });
+  console.log("🚀 ¡Todo listo y subido! Espera unos segundos a que Vercel termine el despliegue.");
 } catch (err) {
   console.error("Error al subir a Git:", err);
 }
