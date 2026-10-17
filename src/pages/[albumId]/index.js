@@ -26,6 +26,10 @@ export default function MuroEvento() {
   const [videoDuracion, setVideoDuracion] = useState(0);
   const [tiempoInicio, setTiempoInicio] = useState(0);
 
+  // Referencias para el arrastre táctil del bloque de recorte
+  const trackRef = useRef(null);
+  const isDraggingRef = useRef(false);
+
   // Estados de visores
   const [historiasVistas, setHistoriasVistas] = useState([]);
   const [visorHistorias, setVisorHistorias] = useState(null);
@@ -104,12 +108,36 @@ export default function MuroEvento() {
     setTiempoInicio(0);
   };
 
-  const handleTimelineChange = (e) => {
-    const val = parseFloat(e.target.value);
-    setTiempoInicio(val);
-    setArchivoEditando(prev => ({ ...prev, trimStart: val }));
+  // --- LÓGICA TÁCTIL DEL BLOQUE DESLIZANTE ---
+  const handleTouchOrMouseStart = (e) => {
+    isDraggingRef.current = true;
+    actualizarPosicionDesdeEvento(e);
+  };
+
+  const handleTouchOrMouseMove = (e) => {
+    if (!isDraggingRef.current) return;
+    actualizarPosicionDesdeEvento(e);
+  };
+
+  const handleTouchOrMouseEnd = () => {
+    isDraggingRef.current = false;
+  };
+
+  const actualizarPosicionDesdeEvento = (e) => {
+    if (!trackRef.current || videoDuracion <= 0) return;
+    const rect = trackRef.current.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const offsetX = clientX - rect.left;
+    const porcentaje = Math.max(0, Math.min(1, offsetX / rect.width));
+
+    const maxDuracionPermitida = archivoEditando?.destino === 'historia' ? 10 : 20;
+    const maxInicio = Math.max(0, videoDuracion - maxDuracionPermitida);
+    const nuevoInicio = porcentaje * maxInicio;
+
+    setTiempoInicio(nuevoInicio);
+    setArchivoEditando(prev => ({ ...prev, trimStart: nuevoInicio }));
     if (videoPreviewRef.current) {
-      videoPreviewRef.current.currentTime = val;
+      videoPreviewRef.current.currentTime = nuevoInicio;
     }
   };
 
@@ -320,13 +348,17 @@ export default function MuroEvento() {
   const maxDuracionPermitida = archivoEditando?.destino === 'historia' ? 10 : 20;
   const necesitaRecorte = videoDuracion > maxDuracionPermitida;
 
+  // Cálculo porcentual para posicionar el bloque azul deslizante sobre la pista
+  const maxInicio = Math.max(0.1, videoDuracion - maxDuracionPermitida);
+  const porcentajeLeft = videoDuracion > 0 ? (tiempoInicio / maxInicio) * 80 : 0; // 80% para dejar espacio al ancho del bloque
+
   return (
     <div className="min-h-screen bg-[#f8f9fa] flex flex-col font-sans overflow-hidden relative">
       
       <input type="file" accept="image/*,video/*" ref={muroInputRef} onChange={(e) => handleFileSelected(e, 'muro')} style={{ display: 'none' }} />
       <input type="file" accept="image/*,video/*" ref={historiaInputRef} onChange={(e) => handleFileSelected(e, 'historia')} style={{ display: 'none' }} />
 
-      {/* --- PANTALLA DE EDICIÓN A PANTALLA COMPLETA (SIN CUADRO NEGRO FLOTANTE) --- */}
+      {/* --- PANTALLA DE EDICIÓN A PANTALLA COMPLETA --- */}
       {archivoEditando !== null && (
         <div className="fixed inset-0 bg-black z-[150] flex flex-col justify-between p-6 animate-fade-in">
           
@@ -357,18 +389,30 @@ export default function MuroEvento() {
 
           <div className="relative z-10 flex flex-col gap-3 pb-6 pointer-events-none">
             
-            {/* BLOQUE AZUL DESLIZABLE FIJO (Línea de tiempo con el bloque exacto que dibujaste) */}
+            {/* BLOQUE TÁCTIL DESLIZANTE REAL (Franja fija que se arrastra con el dedo) */}
             {archivoEditando.tipo === 'video' && necesitaRecorte && (
-              <div className="w-full bg-black/80 backdrop-blur-md p-3.5 rounded-2xl flex flex-col gap-1.5 pointer-events-auto border border-blue-500/40 shadow-2xl">
-                <input 
-                  type="range" 
-                  min="0" 
-                  max={Math.max(0, videoDuracion - maxDuracionPermitida)} 
-                  step="0.1"
-                  value={tiempoInicio}
-                  onChange={handleTimelineChange}
-                  className="w-full accent-blue-500 cursor-pointer h-3 bg-zinc-800 rounded-lg appearance-none"
-                />
+              <div className="w-full bg-black/80 backdrop-blur-md p-4 rounded-2xl flex flex-col gap-2 pointer-events-auto border border-white/20 shadow-2xl">
+                <span className="text-[11px] text-zinc-400 font-medium text-center">Arrastra el bloque para seleccionar los {maxDuracionPermitida}s</span>
+                
+                {/* Pista total */}
+                <div 
+                  ref={trackRef}
+                  onMouseDown={handleTouchOrMouseStart}
+                  onMouseMove={handleTouchOrMouseMove}
+                  onMouseUp={handleTouchOrMouseEnd}
+                  onTouchStart={handleTouchOrMouseStart}
+                  onTouchMove={handleTouchOrMouseMove}
+                  onTouchEnd={handleTouchOrMouseEnd}
+                  className="relative w-full h-12 bg-zinc-900 rounded-xl overflow-hidden cursor-pointer border border-zinc-700 flex items-center"
+                >
+                  {/* Bloque deslizante azul */}
+                  <div 
+                    className="absolute h-full bg-blue-600/80 border-2 border-blue-400 rounded-lg shadow-lg flex items-center justify-center transition-all duration-75"
+                    style={{ width: '20%', left: `${porcentajeLeft}%` }}
+                  >
+                    <div className="w-1.5 h-6 bg-white/80 rounded-full"></div>
+                  </div>
+                </div>
               </div>
             )}
 
