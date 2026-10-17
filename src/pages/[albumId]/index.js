@@ -15,13 +15,16 @@ export default function MuroEvento() {
   const [menuAbierto, setMenuAbierto] = useState(false);
   const [archivos, setArchivos] = useState([]);
   const [subiendo, setSubiendo] = useState(false);
-  const [progresoSubida, setProgresoSubida] = useState('');
 
-  const galleryInputRef = useRef(null);
-  const [loteArchivos, setLoteArchivos] = useState([]); 
-  const [archivoEditandoIndex, setArchivoEditandoIndex] = useState(null);
+  // Inputs separados: uno exclusivo para Muro, otro para Historia
+  const muroInputRef = useRef(null);
+  const historiaInputRef = useRef(null);
 
-  // Estados específicos para el recortador de video profesional
+  // Estado del archivo actual en edición (Pantalla completa inmersiva)
+  const [archivoEditando, setArchivoEditando] = useState(null); // { file, previewUrl, tipo, destino ('muro'|'historia'), comentario: '', trimStart: 0 }
+  const [mostrarCajaComentario, setMostrarCajaComentario] = useState(false);
+
+  // Recortador de video
   const videoPreviewRef = useRef(null);
   const [videoDuracion, setVideoDuracion] = useState(0);
   const [tiempoInicio, setTiempoInicio] = useState(0);
@@ -65,7 +68,7 @@ export default function MuroEvento() {
 
   const getTime = (item) => item.creadoEn?.toMillis ? item.creadoEn.toMillis() : (item.creadoEn ? new Date(item.creadoEn).getTime() : 0);
 
-  // REGLA DE ORO DE 5 DÍAS: Todo se borra estrictamente a los 5 días del evento
+  // REGLA DE ORO DE 5 DÍAS: Absolutamente todo se borra estrictamente a los 5 días de la fecha del evento
   const archivosValidos = archivos.filter(a => (Date.now() - 5 * 24 * 60 * 60 * 1000) < getTime(a));
   const itemsMuro = archivosValidos.filter(a => a.tipo === 'imagen' || a.destino === 'muro');
   
@@ -81,124 +84,78 @@ export default function MuroEvento() {
     return aVisto ? 1 : -1;
   });
 
-  const handleGalleryFilesSelected = (e) => {
-    const files = Array.from(e.target.files);
-    if (files.length === 0) return;
+  // Manejadores de selección de galería
+  const handleFileSelected = (e, destino) => {
+    const file = e.target.files[0];
+    if (!file) return;
 
-    const nuevosItems = files.map((file, idx) => {
-      const tipo = file.type.startsWith('video/') ? 'video' : 'imagen';
-      return {
-        id: `file-${Date.now()}-${idx}`,
-        file,
-        previewUrl: URL.createObjectURL(file),
-        tipo,
-        destino: 'muro',
-        comentario: '',
-        trimStart: 0 // Segundo de inicio para el recorte
-      };
+    const tipo = file.type.startsWith('video/') ? 'video' : 'imagen';
+    setArchivoEditando({
+      file,
+      previewUrl: URL.createObjectURL(file),
+      tipo,
+      destino,
+      comentario: '',
+      trimStart: 0
     });
-
-    setLoteArchivos(nuevosItems);
-    setArchivoEditandoIndex(0);
+    setMostrarCajaComentario(false);
     setTiempoInicio(0);
     e.target.value = null;
   };
 
-  const actualizarItemActual = (campo, valor) => {
-    const actualizados = [...loteArchivos];
-    actualizados[archivoEditandoIndex][campo] = valor;
-    
-    // Si cambia de destino, ajustamos el inicio del recorte si excede los límites nuevos
-    if (campo === 'destino') {
-      const maxDur = valor === 'historia' ? 10 : 20;
-      if (videoDuracion > maxDur && actualizados[archivoEditandoIndex].trimStart + maxDur > videoDuracion) {
-        actualizados[archivoEditandoIndex].trimStart = Math.max(0, videoDuracion - maxDur);
-        setTiempoInicio(actualizados[archivoEditandoIndex].trimStart);
-      }
-    }
-
-    setLoteArchivos(actualizados);
-  };
-
-  const eliminarItemDelLote = (index) => {
-    const actualizados = loteArchivos.filter((_, i) => i !== index);
-    if (actualizados.length === 0) {
-      setLoteArchivos([]);
-      setArchivoEditandoIndex(null);
-    } else {
-      setLoteArchivos(actualizados);
-      const nuevoIndex = Math.min(index, actualizados.length - 1);
-      setArchivoEditandoIndex(nuevoIndex);
-      setTiempoInicio(actualizados[nuevoIndex].trimStart || 0);
-    }
-  };
-
-  // Manejador cuando carga el video en el editor para leer su duración
   const handleVideoLoadedMetadata = (e) => {
-    const dur = e.target.duration;
-    setVideoDuracion(dur);
-    if (loteArchivos[archivoEditandoIndex]) {
-      setTiempoInicio(loteArchivos[archivoEditandoIndex].trimStart || 0);
-    }
+    setVideoDuracion(e.target.duration);
+    setTiempoInicio(0);
   };
 
   const handleSliderChange = (e) => {
     const val = parseFloat(e.target.value);
     setTiempoInicio(val);
-    actualizarItemActual('trimStart', val);
+    setArchivoEditando(prev => ({ ...prev, trimStart: val }));
     if (videoPreviewRef.current) {
       videoPreviewRef.current.currentTime = val;
     }
   };
 
-  // --- PROCESAMIENTO Y SUBIDA CON CORTE REAL (Canvas / MediaRecorder o Stream) ---
-  const procesarYSubirLote = async () => {
+  // --- PROCESAMIENTO Y SUBIDA FINAL ---
+  const publicarArchivo = async () => {
+    if (!archivoEditando) return;
     setSubiendo(true);
     try {
-      let total = loteArchivos.length;
-      for (let i = 0; i < total; i++) {
-        const item = loteArchivos[i];
-        setProgresoSubida(total === 1 ? 'Publicando...' : `Subiendo ${i + 1} de ${total}...`);
+      let archivoFinal = archivoEditando.file;
+      const maxDuracion = archivoEditando.destino === 'historia' ? 10 : 20;
 
-        let archivoFinal = item.file;
-
-        if (item.tipo === 'imagen') {
-          archivoFinal = await comprimirImagen(item.file);
-        } else if (item.tipo === 'video') {
-          // Si es video, aplicamos el recorte de tiempo exacto (Historia máx 10s, Muro máx 20s)
-          const maxDuracion = item.destino === 'historia' ? 10 : 20;
-          archivoFinal = await recortarVideoEnCliente(item.file, item.trimStart || 0, maxDuracion);
-        }
-
-        const extension = archivoFinal.name.split('.').pop() || (item.tipo === 'video' ? 'mp4' : 'jpg');
-        const nombreArchivo = `${Date.now()}-${Math.random().toString(36).substring(2)}.${extension}`;
-        const ruta = storageRef(storage, `eventos/${albumId}/${nombreArchivo}`);
-
-        await uploadBytes(ruta, archivoFinal);
-        const urlDescarga = await getDownloadURL(ruta);
-
-        await addDoc(collection(db, 'albums', albumId, 'fotos'), {
-          url: urlDescarga,
-          tipo: item.tipo,
-          destino: item.destino,
-          comentario: item.comentario.trim(),
-          creadoEn: new Date(),
-          subidoPor: usuario ? usuario.uid : 'anonimo'
-        });
+      if (archivoEditando.tipo === 'imagen') {
+        archivoFinal = await comprimirImagen(archivoEditando.file);
+      } else if (archivoEditando.tipo === 'video') {
+        archivoFinal = await recortarVideoEnCliente(archivoEditando.file, archivoEditando.trimStart || 0, maxDuracion);
       }
 
-      setLoteArchivos([]);
-      setArchivoEditandoIndex(null);
+      const extension = archivoFinal.name.split('.').pop() || (archivoEditando.tipo === 'video' ? 'mp4' : 'jpg');
+      const nombreArchivo = `${Date.now()}-${Math.random().toString(36).substring(2)}.${extension}`;
+      const ruta = storageRef(storage, `eventos/${albumId}/${nombreArchivo}`);
+
+      await uploadBytes(ruta, archivoFinal);
+      const urlDescarga = await getDownloadURL(ruta);
+
+      await addDoc(collection(db, 'albums', albumId, 'fotos'), {
+        url: urlDescarga,
+        tipo: archivoEditando.tipo,
+        destino: archivoEditando.destino,
+        comentario: archivoEditando.comentario.trim(),
+        creadoEn: new Date(),
+        subidoPor: usuario ? usuario.uid : 'anonimo'
+      });
+
+      setArchivoEditando(null);
     } catch (error) {
       console.error(error);
-      alert("Hubo un error al procesar o subir los archivos.");
+      alert("Hubo un error al subir el archivo.");
     } finally {
       setSubiendo(false);
-      setProgresoSubida('');
     }
   };
 
-  // Compresor de imágenes
   const comprimirImagen = (file) => {
     return new Promise((resolve) => {
       const reader = new FileReader();
@@ -233,7 +190,6 @@ export default function MuroEvento() {
     });
   };
 
-  // Recortador de video profesional en cliente usando Canvas & MediaRecorder
   const recortarVideoEnCliente = (file, startTime, maxDuration) => {
     return new Promise((resolve) => {
       const video = document.createElement('video');
@@ -251,20 +207,18 @@ export default function MuroEvento() {
           canvas.height = video.videoHeight || 1280;
           const ctx = canvas.getContext('2d');
 
-          const stream = canvas.captureStream(30); // 30 fps fluidos
+          const stream = canvas.captureStream(30);
           let recorderOptions = { mimeType: 'video/webm;codecs=vp9' };
           if (!MediaRecorder.isTypeSupported(recorderOptions.mimeType)) {
             recorderOptions = { mimeType: 'video/mp4' };
-            if (!MediaRecorder.isTypeSupported(recorderOptions.mimeType)) {
-              recorderOptions = {}; // Predeterminado del navegador
-            }
+            if (!MediaRecorder.isTypeSupported(recorderOptions.mimeType)) recorderOptions = {};
           }
 
           let mediaRecorder;
           try {
             mediaRecorder = new MediaRecorder(stream, recorderOptions);
           } catch(e) {
-            resolve(file); // Si el navegador no soporta grabación de canvas, devuelve el original
+            resolve(file);
             return;
           }
 
@@ -272,8 +226,7 @@ export default function MuroEvento() {
           mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
           mediaRecorder.onstop = () => {
             const blob = new Blob(chunks, { type: recorderOptions.mimeType || 'video/mp4' });
-            const trimmedFile = new File([blob], file.name, { type: blob.type, lastModified: Date.now() });
-            resolve(trimmedFile);
+            resolve(new File([blob], file.name, { type: blob.type, lastModified: Date.now() }));
           };
 
           mediaRecorder.start();
@@ -288,7 +241,7 @@ export default function MuroEvento() {
               video.pause();
               mediaRecorder.stop();
             }
-          }, 33); // ~30fps
+          }, 33);
         };
       };
     });
@@ -368,165 +321,113 @@ export default function MuroEvento() {
   if (cargando) return <div className="min-h-screen flex items-center justify-center font-sans">Cargando...</div>;
   if (!album) return null;
 
-  const archivoActual = loteArchivos[archivoEditandoIndex];
-  const maxDuracionActual = archivoActual?.destino === 'historia' ? 10 : 20;
+  const maxDuracionActual = archivoEditando?.destino === 'historia' ? 10 : 20;
 
   return (
     <div className="min-h-screen bg-[#f8f9fa] flex flex-col font-sans overflow-hidden relative">
       
-      <input 
-        type="file" 
-        accept="image/*,video/*" 
-        multiple 
-        ref={galleryInputRef} 
-        onChange={handleGalleryFilesSelected} 
-        style={{ display: 'none' }} 
-      />
+      {/* Inputs de galería ocultos y separados */}
+      <input type="file" accept="image/*,video/*" ref={muroInputRef} onChange={(e) => handleFileSelected(e, 'muro')} style={{ display: 'none' }} />
+      <input type="file" accept="image/*,video/*" ref={historiaInputRef} onChange={(e) => handleFileSelected(e, 'historia')} style={{ display: 'none' }} />
 
-      {/* --- EDITOR Y RECORTADOR PROFESIONAL ESTILO TIKTOK / INSTAGRAM --- */}
-      {loteArchivos.length > 0 && archivoEditandoIndex !== null && (
-        <div className="fixed inset-0 bg-black z-[150] flex flex-col justify-between p-5 md:p-8 animate-fade-in">
+      {/* --- PANTALLA DE EDICIÓN INMERSIVA A PANTALLA COMPLETA --- */}
+      {archivoEditando !== null && (
+        <div className="fixed inset-0 bg-black z-[150] flex flex-col justify-between p-6 animate-fade-in">
           
-          {/* Barra Superior */}
-          <div className="flex justify-between items-center text-white pb-3 border-b border-white/10">
+          {/* Cabecera minimalista */}
+          <div className="flex justify-between items-center text-white z-10">
             <button 
-              onClick={() => { setLoteArchivos([]); setArchivoEditandoIndex(null); }}
+              onClick={() => setArchivoEditando(null)}
               className="text-sm font-medium text-zinc-400 hover:text-white transition"
             >
               Cancelar
             </button>
-            <span className="text-xs font-semibold tracking-wider uppercase text-zinc-300">
-              {loteArchivos.length === 1 ? 'Editar contenido' : `Archivo ${archivoEditandoIndex + 1} de ${loteArchivos.length}`}
+            <span className="text-xs font-bold uppercase tracking-widest text-zinc-300">
+              {archivoEditando.destino === 'muro' ? 'Nueva Publicación (Muro)' : 'Nueva Historia'}
             </span>
-            <button 
-              onClick={() => eliminarItemDelLote(archivoEditandoIndex)}
-              className="text-xs text-red-400 font-medium hover:text-red-300 transition"
-            >
-              Eliminar
-            </button>
+            <div className="w-10"></div>
           </div>
 
-          {/* Visualizador / Recortador */}
-          <div className="flex-1 my-3 flex flex-col items-center justify-center relative overflow-hidden rounded-2xl bg-[#0a0a0a]">
-            {archivoActual.tipo === 'video' ? (
-              <div className="w-full h-full flex flex-col items-center justify-center relative">
-                <video 
-                  ref={videoPreviewRef}
-                  src={archivoActual.previewUrl} 
-                  onLoadedMetadata={handleVideoLoadedMetadata}
-                  controls 
-                  playsInline
-                  className="max-h-[70%] max-w-full object-contain" 
-                />
-
-                {/* Barra deslizante de recorte profesional (Trim Slider) */}
-                {videoDuracion > maxDuracionActual && (
-                  <div className="w-full max-w-md px-6 mt-4 flex flex-col gap-1.5 bg-black/60 py-3 rounded-2xl backdrop-blur-md">
-                    <div className="flex justify-between text-[11px] text-zinc-400 font-medium">
-                      <span>Inicio: {tiempoInicio.toFixed(1)}s</span>
-                      <span className="text-blue-400 font-bold">Máx {maxDuracionActual}s</span>
-                      <span>Fin: {(tiempoInicio + maxDuracionActual).toFixed(1)}s</span>
-                    </div>
-                    <input 
-                      type="range" 
-                      min="0" 
-                      max={Math.max(0, videoDuracion - maxDuracionActual)} 
-                      step="0.1"
-                      value={tiempoInicio}
-                      onChange={handleSliderChange}
-                      className="w-full accent-blue-600 cursor-pointer"
-                    />
-                  </div>
-                )}
-              </div>
+          {/* Medida a Pantalla Completa (Gran protagonista) */}
+          <div className="absolute inset-0 flex items-center justify-center bg-black">
+            {archivoEditando.tipo === 'video' ? (
+              <video 
+                ref={videoPreviewRef}
+                src={archivoEditando.previewUrl} 
+                onLoadedMetadata={handleVideoLoadedMetadata}
+                controls 
+                playsInline
+                className="w-full h-full object-contain" 
+              />
             ) : (
               <img 
-                src={archivoActual.previewUrl} 
-                className="max-h-full max-w-full object-contain" 
+                src={archivoEditando.previewUrl} 
+                className="w-full h-full object-contain" 
                 alt="Preview" 
               />
             )}
           </div>
 
-          {/* Mini Carrusel inferior si son varios archivos */}
-          {loteArchivos.length > 1 && (
-            <div className="flex gap-2 overflow-x-auto py-2 [&::-webkit-scrollbar]:hidden">
-              {loteArchivos.map((item, idx) => (
-                <button
-                  key={item.id}
-                  onClick={() => setArchivoEditandoIndex(idx)}
-                  className={`relative w-14 h-14 rounded-xl overflow-hidden flex-shrink-0 border-2 transition ${idx === archivoEditandoIndex ? 'border-blue-500 scale-105' : 'border-transparent opacity-50'}`}
-                >
-                  {item.tipo === 'video' ? (
-                    <video src={item.previewUrl} className="w-full h-full object-cover" />
-                  ) : (
-                    <img src={item.previewUrl} className="w-full h-full object-cover" />
-                  )}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Panel de Opciones */}
-          <div className="bg-[#121214] border border-white/10 rounded-3xl p-5 flex flex-col gap-4 shadow-2xl">
+          {/* Controles Flotantes Inferiores (Recorte, Comentario Oculto y Botón Publicar) */}
+          <div className="relative z-10 flex flex-col gap-3 pb-6 pointer-events-none">
             
-            {/* Selector de Destino limpio */}
-            <div className="flex bg-[#222226] p-1 rounded-2xl">
+            {/* Si es video y es largo, barra de recorte elegante abajo */}
+            {archivoEditando.tipo === 'video' && videoDuracion > maxDuracionActual && (
+              <div className="w-full bg-black/60 backdrop-blur-md p-4 rounded-2xl flex flex-col gap-1 pointer-events-auto">
+                <div className="flex justify-between text-[11px] text-zinc-300 font-medium">
+                  <span>Recortar video (Máx {maxDuracionActual}s)</span>
+                  <span>{tiempoInicio.toFixed(1)}s - {(tiempoInicio + maxDuracionActual).toFixed(1)}s</span>
+                </div>
+                <input 
+                  type="range" 
+                  min="0" 
+                  max={Math.max(0, videoDuracion - maxDuracionActual)} 
+                  step="0.1"
+                  value={tiempoInicio}
+                  onChange={handleSliderChange}
+                  className="w-full accent-blue-500 cursor-pointer"
+                />
+              </div>
+            )}
+
+            {/* Caja de Comentario Desplegable (Solo si toca el ícono) */}
+            {mostrarCajaComentario && (
+              <div className="w-full bg-black/80 backdrop-blur-md p-3 rounded-2xl pointer-events-auto animate-fade-in">
+                <input 
+                  type="text" 
+                  placeholder="Escribe un comentario..." 
+                  value={archivoEditando.comentario} 
+                  onChange={(e) => setArchivoEditando({ ...archivoEditando, comentario: e.target.value })}
+                  className="w-full bg-white/10 text-white placeholder-zinc-400 px-4 py-3 rounded-xl outline-none border border-white/20 text-sm font-light"
+                  autoFocus
+                />
+              </div>
+            )}
+
+            {/* Fila inferior: Botón de Comentario Lateral + Botón Publicar Grande */}
+            <div className="flex items-center gap-3 pointer-events-auto">
+              
+              {/* Botón Circular Discreto para Comentario */}
               <button 
-                onClick={() => actualizarItemActual('destino', 'muro')}
-                className={`flex-1 py-3 rounded-xl text-xs font-bold tracking-wide transition ${archivoActual.destino === 'muro' ? 'bg-white text-black shadow-md' : 'text-zinc-400 hover:text-white'}`}
+                onClick={() => setMostrarCajaComentario(!mostrarCajaComentario)}
+                className={`w-14 h-14 rounded-2xl backdrop-blur-md border flex items-center justify-center transition ${mostrarCajaComentario ? 'bg-blue-600 border-blue-400 text-white' : 'bg-black/40 border-white/20 text-white hover:bg-black/60'}`}
+                title="Añadir comentario"
               >
-                Muro
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                </svg>
               </button>
+
+              {/* Botón Principal de Publicar */}
               <button 
-                onClick={() => actualizarItemActual('destino', 'historia')}
-                className={`flex-1 py-3 rounded-xl text-xs font-bold tracking-wide transition ${archivoActual.destino === 'historia' ? 'bg-white text-black shadow-md' : 'text-zinc-400 hover:text-white'}`}
+                onClick={publicarArchivo}
+                disabled={subiendo}
+                className="flex-1 py-4 bg-blue-600 text-white font-bold rounded-2xl text-base shadow-[0_10px_25px_rgba(37,99,235,0.4)] hover:bg-blue-500 transition flex items-center justify-center gap-2"
               >
-                Historia
+                {subiendo ? <span>⏳ Publicando...</span> : <span>Publicar</span>}
               </button>
             </div>
 
-            {/* Comentario */}
-            <input 
-              type="text" 
-              placeholder="Escribe un comentario..." 
-              value={archivoActual.comentario} 
-              onChange={(e) => actualizarItemActual('comentario', e.target.value)}
-              className="w-full bg-[#1c1c21] text-white placeholder-zinc-500 px-4 py-3.5 rounded-2xl outline-none border border-transparent focus:border-zinc-700 text-sm font-light transition"
-            />
-
-            {/* Botón de Publicación Inteligente (1 vs Varios) */}
-            <div className="flex gap-3 pt-1">
-              {archivoEditandoIndex < loteArchivos.length - 1 ? (
-                <>
-                  <button 
-                    onClick={() => setArchivoEditandoIndex(archivoEditandoIndex + 1)}
-                    className="flex-1 py-3.5 bg-zinc-800 text-white font-bold rounded-2xl text-sm hover:bg-zinc-700 transition"
-                  >
-                    Siguiente ({archivoEditandoIndex + 1}/{loteArchivos.length})
-                  </button>
-                  <button 
-                    onClick={procesarYSubirLote}
-                    disabled={subiendo}
-                    className="flex-1 py-3.5 bg-blue-600 text-white font-bold rounded-2xl text-sm shadow-lg hover:bg-blue-500 transition flex items-center justify-center gap-2"
-                  >
-                    {subiendo ? <span>⏳ {progresoSubida}</span> : <span>Publicar todo ({loteArchivos.length})</span>}
-                  </button>
-                </>
-              ) : (
-                <button 
-                  onClick={procesarYSubirLote}
-                  disabled={subiendo}
-                  className="w-full py-4 bg-blue-600 text-white font-bold rounded-2xl text-sm shadow-lg hover:bg-blue-500 transition flex items-center justify-center gap-2"
-                >
-                  {subiendo ? (
-                    <><span>⏳</span> {progresoSubida}</>
-                  ) : (
-                    <span>{loteArchivos.length === 1 ? 'Publicar' : `Publicar todo (${loteArchivos.length})`}</span>
-                  )}
-                </button>
-              )}
-            </div>
           </div>
         </div>
       )}
@@ -577,7 +478,7 @@ export default function MuroEvento() {
         </div>
       )}
 
-      {/* --- CABECERA Y CARRUSEL DE HISTORIAS --- */}
+      {/* --- CABECERA Y CARRUSEL DE HISTORIAS (CON SU PROPIO BOTÓN + EXCLUSIVO) --- */}
       <header className="bg-white pt-4 pb-5 shadow-sm sticky top-0 z-10 rounded-b-[2rem] flex flex-col">
         <div className="flex items-center justify-between px-6">
           <button onClick={() => router.push('/')} className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-50 text-gray-600">←</button>
@@ -588,27 +489,38 @@ export default function MuroEvento() {
           <button onClick={() => setMenuAbierto(true)} className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-50 text-gray-600 pb-2 text-2xl">⋮</button>
         </div>
 
-        {historiasOrdenadas.length > 0 && (
-          <div className="flex gap-3 overflow-x-auto mt-6 px-6 pb-2 [&::-webkit-scrollbar]:hidden">
-            {historiasOrdenadas.map((historia, index) => {
-              const visto = historiasVistas.includes(historia.id);
-              return (
-                <button key={historia.id} onClick={() => abrirHistoria(index)} className={`flex-shrink-0 relative rounded-[16px] p-[2px] transition-all transform hover:scale-95 ${visto ? 'bg-gray-300' : 'bg-blue-500'}`}>
-                  <div className="w-14 h-20 bg-black rounded-[14px] overflow-hidden border-[2px] border-white relative flex items-center justify-center">
-                    <video src={historia.url} className={`w-full h-full object-cover transition-opacity duration-300 ${visto ? 'opacity-50' : 'opacity-80'}`} />
-                    {!visto && <span className="absolute bottom-1 bg-black/60 text-white px-1.5 py-0.5 rounded text-[8px] font-bold tracking-widest">NUEVO</span>}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        )}
+        {/* Carrusel con Botón + Exclusivo para Historias al inicio */}
+        <div className="flex gap-3 overflow-x-auto mt-6 px-6 pb-2 [&::-webkit-scrollbar]:hidden items-center">
+          
+          {/* BOTÓN + EXCLUSIVO DE HISTORIAS */}
+          <button 
+            onClick={() => historiaInputRef.current.click()}
+            className="flex-shrink-0 w-14 h-20 rounded-[16px] bg-blue-50 border-2 border-dashed border-blue-400 flex flex-col items-center justify-center gap-1 text-blue-600 transition transform hover:scale-95"
+            title="Subir Historia"
+          >
+            <span className="text-2xl font-light">+</span>
+            <span className="text-[8px] font-bold uppercase tracking-wider">Historia</span>
+          </button>
+
+          {/* Lista de Historias */}
+          {historiasOrdenadas.map((historia, index) => {
+            const visto = historiasVistas.includes(historia.id);
+            return (
+              <button key={historia.id} onClick={() => abrirHistoria(index)} className={`flex-shrink-0 relative rounded-[16px] p-[2px] transition-all transform hover:scale-95 ${visto ? 'bg-gray-300' : 'bg-blue-500'}`}>
+                <div className="w-14 h-20 bg-black rounded-[14px] overflow-hidden border-[2px] border-white relative flex items-center justify-center">
+                  <video src={historia.url} className={`w-full h-full object-cover transition-opacity duration-300 ${visto ? 'opacity-50' : 'opacity-80'}`} />
+                  {!visto && <span className="absolute bottom-1 bg-black/60 text-white px-1.5 py-0.5 rounded text-[8px] font-bold tracking-widest">NUEVO</span>}
+                </div>
+              </button>
+            );
+          })}
+        </div>
       </header>
 
       {/* --- MURO --- */}
       <main className="flex-1 p-6 overflow-y-auto pb-32">
         {itemsMuro.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-center text-gray-400 mt-10"><div className="text-6xl mb-4 opacity-30">📷</div><p className="text-sm font-medium">Aún no hay contenido.</p></div>
+          <div className="h-full flex flex-col items-center justify-center text-center text-gray-400 mt-10"><div className="text-6xl mb-4 opacity-30">📷</div><p className="text-sm font-medium">Aún no hay contenido en el muro.</p></div>
         ) : (
           <div className="grid grid-cols-2 gap-4 auto-rows-fr">
             {itemsMuro.map((item, index) => (
@@ -632,10 +544,10 @@ export default function MuroEvento() {
         )}
       </main>
 
-      {/* BOTÓN "+" PRINCIPAL */}
+      {/* BOTÓN "+" PRINCIPAL EXCLUSIVO DEL MURO */}
       <div className="fixed bottom-10 w-full flex justify-center z-20 pointer-events-none">
         <button 
-          onClick={() => galleryInputRef.current.click()}
+          onClick={() => muroInputRef.current.click()}
           disabled={subiendo} 
           className={`pointer-events-auto bg-blue-600 text-white w-16 h-16 rounded-full shadow-[0_10px_25px_rgba(37,99,235,0.4)] flex items-center justify-center text-4xl pb-1 hover:bg-blue-700 transition transform ${subiendo ? 'opacity-50 scale-95' : 'hover:-translate-y-1'}`}>
           {subiendo ? <span className="text-lg">⏳</span> : '+'}
