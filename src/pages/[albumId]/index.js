@@ -236,7 +236,7 @@ export default function MuroEvento() {
     });
   };
 
-  const handleLike = async (e, id, currentLikes) => {
+  const handleLike = async (e, id) => {
     e.stopPropagation();
     try {
       const docRef = doc(db, 'albums', albumId, 'fotos', id);
@@ -509,56 +509,64 @@ export default function MuroEvento() {
           <div className="h-full flex flex-col items-center justify-center text-center text-gray-400 mt-10"><div className="text-6xl mb-4 opacity-30">📷</div><p className="text-sm font-medium">Aún no hay contenido en el muro.</p></div>
         ) : (
           <div className={`grid ${gridColsClass} ${gridGapClass} auto-rows-fr transition-all duration-300`}>
-            {itemsMuro.map((item, index) => (
-              <div key={item.id} onClick={() => abrirItemMuro(index)} className="relative aspect-square w-full rounded-2xl overflow-hidden bg-zinc-900 shadow-sm transition-all hover:scale-[0.98] cursor-pointer">
-                
-                {item.tipo === 'video' ? (
-                  <video src={item.url} autoPlay loop muted playsInline className="w-full h-full object-cover" />
-                ) : (
-                  <img src={item.url} className="w-full h-full object-cover" loading="lazy" />
-                )}
+            {itemsMuro.map((item, index) => {
+              const esDueno = usuario && item.subidoPor === usuario.uid;
+              const tieneLikes = item.likes > 0;
+              const corazonRojo = esDueno && tieneLikes;
 
-                {item.tipo === 'video' && (
-                  <div className="absolute top-2 right-2 bg-black/40 backdrop-blur-md p-1.5 rounded-full border border-white/20">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5 text-white"><rect x="2" y="6" width="15" height="12" rx="2" ry="2"></rect><polygon points="17 10 22 7 22 17 17 14"></polygon></svg>
-                  </div>
-                )}
-
-                <div className="absolute bottom-0 inset-x-0 p-2.5 bg-gradient-to-t from-black/70 via-black/30 to-transparent flex items-center justify-end gap-3 text-white">
+              return (
+                <div key={item.id} onClick={() => abrirItemMuro(index)} className="relative aspect-square w-full rounded-2xl overflow-hidden bg-zinc-900 shadow-sm transition-all hover:scale-[0.98] cursor-pointer">
                   
-                  <div className="flex items-center gap-1 bg-black/40 backdrop-blur-md px-2 py-1 rounded-full border border-white/10 text-[11px] font-medium">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
-                    <span>{item.comentariosCount || 0}</span>
-                  </div>
+                  {item.tipo === 'video' ? (
+                    <video src={item.url} autoPlay loop muted playsInline className="w-full h-full object-cover" />
+                  ) : (
+                    <img src={item.url} className="w-full h-full object-cover" loading="lazy" />
+                  )}
 
-                  <button 
-                    onClick={(e) => handleLike(e, item.id, item.likes)}
-                    className="flex items-center gap-1 bg-black/40 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/10 text-[11px] font-medium transition active:scale-125"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5 text-red-500"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-                    <span>{item.likes || 0}</span>
-                  </button>
+                  {item.tipo === 'video' && (
+                    <div className="absolute top-2 right-2 bg-black/40 backdrop-blur-md p-1.5 rounded-full border border-white/20">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5 text-white"><rect x="2" y="6" width="15" height="12" rx="2" ry="2"></rect><polygon points="17 10 22 7 22 17 17 14"></polygon></svg>
+                    </div>
+                  )}
+
+                  {/* Iconos flotantes puros sin recuadro y con condición de contador > 0 */}
+                  <div className="absolute bottom-2 right-2.5 flex items-center gap-3 text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
+                    
+                    {/* Comentarios */}
+                    {item.comentariosCount > 0 && (
+                      <div className="flex items-center gap-1 text-xs font-semibold">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                        <span>{item.comentariosCount}</span>
+                      </div>
+                    )}
+
+                    {/* Me Gusta (Corazón) */}
+                    <button 
+                      onClick={(e) => handleLike(e, item.id)}
+                      className="flex items-center gap-1 text-xs font-semibold transition active:scale-125"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={corazonRojo ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`w-4 h-4 ${corazonRojo ? 'text-red-500' : 'text-white'}`}><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                      {item.likes > 0 && <span>{item.likes}</span>}
+                    </button>
+
+                  </div>
 
                 </div>
-
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </main>
 
-      {/* BOTÓN FLOTANTE DE ZOOM (Solo aparece cuando columnasMuro > 2) */}
+      {/* BOTÓN FLOTANTE DE ZOOM (Lupita elegante y minimalista, sin numerito de cuadros) */}
       {columnasMuro > 2 && (
         <div className="fixed bottom-28 right-6 z-20 animate-fade-in">
           <button 
             onClick={ciclarColumnas}
-            className="w-12 h-12 bg-white/90 backdrop-blur-md text-zinc-800 rounded-full shadow-lg border border-gray-200 flex items-center justify-center text-lg font-bold transition active:scale-90"
+            className="w-12 h-12 bg-white/90 backdrop-blur-md text-zinc-700 rounded-full shadow-lg border border-gray-200 flex items-center justify-center transition active:scale-90"
             title="Agrandar vista"
           >
-            🔍+
-            <span className="absolute -top-1 -right-1 bg-blue-600 text-white text-[9px] w-4 h-4 rounded-full flex items-center justify-center font-bold">
-              {columnasMuro}
-            </span>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>
           </button>
         </div>
       )}
