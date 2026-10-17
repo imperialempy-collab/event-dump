@@ -33,6 +33,10 @@ export default function MuroEvento() {
   const [isSwipingMuro, setIsSwipingMuro] = useState(false);
   const muroTouchStartRef = useRef({ x: 0, y: 0, ignore: false });
 
+  // --- ESTADO PARA CONTROLAR LAS COLUMNAS DEL MURO (PINCH TO ZOOM) ---
+  const [columnasMuro, setColumnasMuro] = useState(2);
+  const pinchStartDistRef = useRef(null);
+
   useEffect(() => {
     if (!albumId) return;
     const cargarDatos = async () => {
@@ -96,6 +100,41 @@ export default function MuroEvento() {
     if (aVisto === bVisto) return getTime(b) - getTime(a);
     return aVisto ? 1 : -1;
   });
+
+  // --- LÓGICA DEL GESTO DE PELLIZCO (PINCH ZOOM) ---
+  const handlePinchStart = (e) => {
+    if (e.touches.length === 2) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      pinchStartDistRef.current = Math.hypot(dx, dy);
+    }
+  };
+
+  const handlePinchMove = (e) => {
+    if (e.touches.length === 2 && pinchStartDistRef.current !== null) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const currentDist = Math.hypot(dx, dy);
+      const diff = currentDist - pinchStartDistRef.current;
+      
+      // Umbral de 60px para ejecutar el zoom (evita cambios accidentales)
+      if (diff > 60) {
+        // Separar dedos (Hacer más grande -> menos columnas)
+        setColumnasMuro(prev => Math.max(2, prev - 1));
+        pinchStartDistRef.current = currentDist; 
+      } else if (diff < -60) {
+        // Juntar dedos (Hacer más pequeño -> más columnas)
+        setColumnasMuro(prev => Math.min(4, prev + 1));
+        pinchStartDistRef.current = currentDist;
+      }
+    }
+  };
+
+  const handlePinchEnd = (e) => {
+    if (e.touches.length < 2) {
+      pinchStartDistRef.current = null;
+    }
+  };
 
   const handleFileSelected = (e, destino) => {
     const file = e.target.files[0];
@@ -304,6 +343,11 @@ export default function MuroEvento() {
   if (cargando) return <div className="min-h-screen flex items-center justify-center font-sans">Cargando...</div>;
   if (!album) return null;
 
+  // Clases dinámicas para la grilla basadas en el pellizco
+  const gridColsClass = columnasMuro === 2 ? 'grid-cols-2' : columnasMuro === 3 ? 'grid-cols-3' : 'grid-cols-4';
+  const gridGapClass = columnasMuro === 2 ? 'gap-4' : columnasMuro === 3 ? 'gap-2' : 'gap-1';
+  const mainPadding = columnasMuro === 2 ? 'p-6' : columnasMuro === 3 ? 'p-4' : 'p-2';
+
   return (
     <div className="min-h-screen bg-[#f8f9fa] flex flex-col font-sans overflow-hidden relative">
       
@@ -313,7 +357,6 @@ export default function MuroEvento() {
       {/* --- PANTALLA DE EDICIÓN --- */}
       {archivoEditando !== null && (
         <div className="fixed inset-0 bg-black z-[150] flex flex-col justify-between p-6 animate-fade-in">
-          
           <div className="flex justify-between items-center text-white z-10">
             <button onClick={cancelarEdicion} className="text-sm font-medium text-zinc-400 hover:text-white transition">Cancelar</button>
             <span className="text-xs font-bold uppercase tracking-widest text-zinc-300">
@@ -324,19 +367,13 @@ export default function MuroEvento() {
 
           <div className="absolute inset-0 flex items-center justify-center bg-black">
             {archivoEditando.tipo === 'video' ? (
-              <video 
-                src={archivoEditando.previewUrl} 
-                autoPlay loop muted playsInline
-                className="w-full h-full object-contain pointer-events-none" 
-              />
+              <video src={archivoEditando.previewUrl} autoPlay loop muted playsInline className="w-full h-full object-contain pointer-events-none" />
             ) : (
               <img src={archivoEditando.previewUrl} className="w-full h-full object-contain" alt="Preview" />
             )}
           </div>
 
           <div className="relative z-10 flex flex-col gap-3 pb-6 pointer-events-none">
-            
-            {/* Aviso exclusivo para Historias */}
              {archivoEditando.tipo === 'video' && archivoEditando.destino === 'historia' && (
                 <div className="w-full text-center mb-1">
                    <span className="text-xs text-white/80 bg-black/40 px-3 py-1.5 rounded-full backdrop-blur-sm border border-white/10 shadow-lg">
@@ -345,7 +382,6 @@ export default function MuroEvento() {
                 </div>
             )}
 
-            {/* Caja de comentario desplegable */}
             {mostrarCajaComentario && (
               <div className="w-full bg-black/80 backdrop-blur-md p-3 rounded-2xl pointer-events-auto animate-fade-in">
                 <input 
@@ -360,30 +396,18 @@ export default function MuroEvento() {
             )}
 
             <div className="flex items-center gap-3 pointer-events-auto">
-              <button 
-                onClick={() => setMostrarCajaComentario(!mostrarCajaComentario)}
-                className={`w-14 h-14 rounded-2xl backdrop-blur-md border flex items-center justify-center transition ${mostrarCajaComentario ? 'bg-blue-600 border-blue-400 text-white' : 'bg-black/40 border-white/20 text-white hover:bg-black/60'}`}
-                title="Añadir comentario"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6">
-                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-                </svg>
+              <button onClick={() => setMostrarCajaComentario(!mostrarCajaComentario)} className={`w-14 h-14 rounded-2xl backdrop-blur-md border flex items-center justify-center transition ${mostrarCajaComentario ? 'bg-blue-600 border-blue-400 text-white' : 'bg-black/40 border-white/20 text-white hover:bg-black/60'}`} title="Añadir comentario">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
               </button>
-
-              <button 
-                onClick={publicarArchivo}
-                disabled={subiendo}
-                className="flex-1 py-4 bg-blue-600 text-white font-bold rounded-2xl text-base shadow-[0_10px_25px_rgba(37,99,235,0.4)] hover:bg-blue-500 transition flex items-center justify-center gap-2"
-              >
+              <button onClick={publicarArchivo} disabled={subiendo} className="flex-1 py-4 bg-blue-600 text-white font-bold rounded-2xl text-base shadow-[0_10px_25px_rgba(37,99,235,0.4)] hover:bg-blue-500 transition flex items-center justify-center gap-2">
                 {subiendo ? <span>⏳ Subiendo...</span> : <span>Publicar</span>}
               </button>
             </div>
-
           </div>
         </div>
       )}
 
-      {/* --- VISORES --- */}
+      {/* --- VISORES DE HISTORIA Y MURO OCULTADOS POR BREVEDAD --- */}
       {visorHistorias !== null && (
         <div className="fixed inset-0 z-[100] flex flex-col" style={{ backgroundColor: `rgba(0, 0, 0, ${Math.max(0, 1 - Math.abs(swipeOffset) / 400)})`, transform: `translateY(${swipeOffset}px)`, transition: swipeOffset === 0 ? 'transform 0.25s ease-out, background-color 0.25s ease-out' : 'none', touchAction: 'none' }} onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
           <div className="absolute top-0 w-full p-4 pt-6 flex flex-col gap-3 z-[110] bg-gradient-to-b from-black/80 to-transparent pointer-events-none">
@@ -429,7 +453,7 @@ export default function MuroEvento() {
         </div>
       )}
 
-      {/* --- CABECERA Y CARRUSEL DE HISTORIAS --- */}
+      {/* --- CABECERA Y CARRUSEL --- */}
       <header className="bg-white pt-4 pb-5 shadow-sm sticky top-0 z-10 rounded-b-[2rem] flex flex-col">
         <div className="flex items-center justify-between px-6">
           <button onClick={() => router.push('/')} className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-50 text-gray-600">←</button>
@@ -441,15 +465,9 @@ export default function MuroEvento() {
         </div>
 
         <div className="flex gap-3 overflow-x-auto mt-6 px-6 pb-2 [&::-webkit-scrollbar]:hidden items-center">
-          <button 
-            onClick={() => historiaInputRef.current.click()}
-            className="flex-shrink-0 w-14 h-20 rounded-[16px] bg-blue-50 border-2 border-dashed border-blue-400 flex flex-col items-center justify-center gap-1 text-blue-600 transition transform hover:scale-95"
-            title="Subir Historia"
-          >
-            <span className="text-2xl font-light">+</span>
-            <span className="text-[8px] font-bold uppercase tracking-wider">Historia</span>
+          <button onClick={() => historiaInputRef.current.click()} className="flex-shrink-0 w-14 h-20 rounded-[16px] bg-blue-50 border-2 border-dashed border-blue-400 flex flex-col items-center justify-center gap-1 text-blue-600 transition transform hover:scale-95" title="Subir Historia">
+            <span className="text-2xl font-light">+</span><span className="text-[8px] font-bold uppercase tracking-wider">Historia</span>
           </button>
-
           {historiasOrdenadas.map((historia, index) => {
             const visto = historiasVistas.includes(historia.id);
             return (
@@ -464,14 +482,19 @@ export default function MuroEvento() {
         </div>
       </header>
 
-      {/* --- MURO --- */}
-      <main className="flex-1 p-6 overflow-y-auto pb-32">
+      {/* --- MURO CON EVENTOS TÁCTILES PARA EL PELLIZCO --- */}
+      <main 
+        className={`flex-1 overflow-y-auto pb-32 transition-all duration-300 ${mainPadding}`}
+        onTouchStart={handlePinchStart}
+        onTouchMove={handlePinchMove}
+        onTouchEnd={handlePinchEnd}
+      >
         {itemsMuro.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center text-gray-400 mt-10"><div className="text-6xl mb-4 opacity-30">📷</div><p className="text-sm font-medium">Aún no hay contenido en el muro.</p></div>
         ) : (
-          <div className="grid grid-cols-2 gap-4 auto-rows-fr">
+          <div className={`grid ${gridColsClass} ${gridGapClass} auto-rows-fr transition-all duration-300`}>
             {itemsMuro.map((item, index) => (
-              <button key={item.id} onClick={() => abrirItemMuro(index)} className="flex flex-col relative rounded-2xl overflow-hidden bg-white border border-gray-100 shadow-sm transition-all pb-3 text-left hover:shadow-md hover:-translate-y-0.5">
+              <button key={item.id} onClick={() => abrirItemMuro(index)} className="flex flex-col relative rounded-2xl overflow-hidden bg-white border border-gray-100 shadow-sm transition-all pb-2 text-left hover:shadow-md hover:-translate-y-0.5">
                 <div className="relative aspect-square w-full overflow-hidden bg-gray-200">
                   {item.tipo === 'video' ? (
                     <>
@@ -484,7 +507,10 @@ export default function MuroEvento() {
                     <img src={item.url} className="w-full h-full object-cover" loading="lazy" />
                   )}
                 </div>
-                {item.comentario && <p className="text-xs text-gray-600 px-3 mt-2 line-clamp-2 leading-relaxed italic font-sans font-light">"{item.comentario}"</p>}
+                {/* Ocultamos el comentario si hay 4 columnas para que no se sature la pantalla */}
+                {item.comentario && columnasMuro < 4 && (
+                  <p className="text-[10px] sm:text-xs text-gray-600 px-2 mt-1.5 line-clamp-2 leading-relaxed italic font-sans font-light">"{item.comentario}"</p>
+                )}
               </button>
             ))}
           </div>
@@ -493,10 +519,7 @@ export default function MuroEvento() {
 
       {/* BOTÓN "+" PRINCIPAL DEL MURO */}
       <div className="fixed bottom-10 w-full flex justify-center z-20 pointer-events-none">
-        <button 
-          onClick={() => muroInputRef.current.click()}
-          disabled={subiendo} 
-          className={`pointer-events-auto bg-blue-600 text-white w-16 h-16 rounded-full shadow-[0_10px_25px_rgba(37,99,235,0.4)] flex items-center justify-center text-4xl pb-1 hover:bg-blue-700 transition transform ${subiendo ? 'opacity-50 scale-95' : 'hover:-translate-y-1'}`}>
+        <button onClick={() => muroInputRef.current.click()} disabled={subiendo} className={`pointer-events-auto bg-blue-600 text-white w-16 h-16 rounded-full shadow-[0_10px_25px_rgba(37,99,235,0.4)] flex items-center justify-center text-4xl pb-1 hover:bg-blue-700 transition transform ${subiendo ? 'opacity-50 scale-95' : 'hover:-translate-y-1'}`}>
           {subiendo ? <span className="text-lg">⏳</span> : '+'}
         </button>
       </div>
