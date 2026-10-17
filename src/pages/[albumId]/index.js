@@ -1,7 +1,7 @@
 import { useRouter } from 'next/router';
 import { useState, useEffect, useRef } from 'react';
 import { db, storage } from '../../firebase/config';
-import { doc, getDoc, collection, addDoc, onSnapshot, query, orderBy, updateDoc, increment } from 'firebase/firestore';
+import { doc, getDoc, collection, addDoc, onSnapshot, query, orderBy, updateDoc, increment, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useAuthContext } from '../../context/AuthContext';
 
@@ -33,9 +33,20 @@ export default function MuroEvento() {
   const [isSwipingMuro, setIsSwipingMuro] = useState(false);
   const muroTouchStartRef = useRef({ x: 0, y: 0, ignore: false });
 
-  // --- ESTADO DE COLUMNAS (2, 3 o 4) ---
+  const [panelInteractivoAbierto, setPanelInteractivoAbierto] = useState(false);
+  const [nuevoComentarioTexto, setNuevoComentarioTexto] = useState('');
+  const [listaComentarios, setListaComentarios] = useState([]);
+
   const [columnasMuro, setColumnasMuro] = useState(2);
   const pinchStartDistRef = useRef(null);
+
+  const usuarioId = usuario ? usuario.uid : 'anonimo_' + (typeof window !== 'undefined' ? (localStorage.getItem('anon_id') || (() => {
+    const id = Math.random().toString(36).substring(2);
+    localStorage.setItem('anon_id', id);
+    return id;
+  })()) : 'guest');
+
+  const usuarioNombre = usuario ? (usuario.displayName || usuario.email || 'Usuario') : 'Invitado';
 
   useEffect(() => {
     if (!albumId) return;
@@ -58,8 +69,8 @@ export default function MuroEvento() {
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ 
         id: doc.id, 
-        likes: doc.data().likes || 0,
-        comentariosCount: doc.data().comentariosCount || 0,
+        likesArray: doc.data().likesArray || [],
+        comentarios: doc.data().comentarios || [],
         ...doc.data() 
       }));
       setArchivos(data);
@@ -67,13 +78,19 @@ export default function MuroEvento() {
     return () => unsubscribe();
   }, [albumId]);
 
-  // --- CONTROL DEL BOTÓN ATRÁS NATIVO DEL TELÉFONO ---
+  useEffect(() => {
+    if (itemActivoIndex !== null && itemsMuro[itemActivoIndex]) {
+      setListaComentarios(itemsMuro[itemActivoIndex].comentarios || []);
+    }
+  }, [itemActivoIndex, archivos]);
+
   useEffect(() => {
     const handleHashChange = () => {
       if (window.location.hash !== '#viewer') {
         setItemActivoIndex(null);
         setVisorHistorias(null);
         setArchivoEditando(null);
+        setPanelInteractivoAbierto(false);
       }
     };
     window.addEventListener('hashchange', handleHashChange);
@@ -105,7 +122,6 @@ export default function MuroEvento() {
     return aVisto ? 1 : -1;
   });
 
-  // --- GESTO DE PELLIZCO PARA ACHICAR (JUNTAR DEDOS) ---
   const handlePinchStart = (e) => {
     if (e.touches.length === 2) {
       const dx = e.touches[0].clientX - e.touches[1].clientX;
@@ -175,21 +191,29 @@ export default function MuroEvento() {
       }
 
       const extension = archivoFinal.name.split('.').pop() || (archivoEditando.tipo === 'video' ? 'mp4' : 'jpg');
-      const nombreArchivo = `${Date.now()}-${Math.random().toString(36).substring(2)}.${extension}`;
-      const ruta = storageRef(storage, `eventos/${albumId}/${nombreArchivo}`);
+      const nombreArchivo = Date.now() + '-' + Math.random().toString(36).substring(2) + '.' + extension;
+      const ruta = storageRef(storage, 'eventos/' + albumId + '/' + nombreArchivo);
 
       await uploadBytes(ruta, archivoFinal);
       const urlDescarga = await getDownloadURL(ruta);
+
+      const comentariosIniciales = archivoEditando.comentario.trim() ? [{
+        id: Date.now().toString(),
+        texto: archivoEditando.comentario.trim(),
+        autorId: usuarioId,
+        autorNombre: usuarioNombre,
+        creadoEn: new Date().toISOString()
+      }] : [];
 
       await addDoc(collection(db, 'albums', albumId, 'fotos'), {
         url: urlDescarga,
         tipo: archivoEditando.tipo,
         destino: archivoEditando.destino,
-        comentario: archivoEditando.comentario.trim(),
-        likes: 0,
-        comentariosCount: archivoEditando.comentario.trim() ? 1 : 0,
+        likesArray: [],
+        comentarios: comentariosIniciales,
         creadoEn: new Date(),
-        subidoPor: usuario ? usuario.uid : 'anonimo'
+        subidoPor: usuarioId,
+        subidoPorNombre: usuarioNombre
       });
 
       setArchivoEditando(null);
@@ -236,11 +260,43 @@ export default function MuroEvento() {
     });
   };
 
-  const handleLike = async (e, id) => {
+  const handleLike = async (e, id, likesArray = []) => {
     e.stopPropagation();
     try {
       const docRef = doc(db, 'albums', albumId, 'fotos', id);
-      await updateDoc(docRef, { likes: increment(1) });
+      const yaDioLike = likesArray.includes(usuarioId);
+
+      if (yaDioLike) {
+        await updateDoc(docRef, { likesArray: arrayRemove(usuarioId) });
+      } else {
+        await updateDoc(docRef, { likesArray: arrayUnion(usuarioId) });
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const enviarComentario = async (e) => {
+    e.preventDefault();
+    if (!nuevoComentarioTexto.trim() || itemActivoIndex === null) return;
+    const itemActual = itemsMuro[itemActivoIndex];
+    if (!itemActual) return;
+
+    try {
+      const docRef = doc(db, 'albums', albumId, 'fotos', itemActual.id);
+      const nuevoComentario = {
+        id: Date.now().toString(),
+        texto: nuevoComentarioTexto.trim(),
+        autorId: usuarioId,
+        autorNombre: usuarioNombre,
+        creadoEn: new Date().toISOString()
+      };
+
+      await updateDoc(docRef, {
+        comentarios: arrayUnion(nuevoComentario)
+      });
+
+      setNuevoComentarioTexto('');
     } catch (err) {
       console.error(err);
     }
@@ -249,7 +305,7 @@ export default function MuroEvento() {
   useEffect(() => {
     if (itemActivoIndex !== null) {
       itemsMuro.forEach((item, index) => {
-        const videoEl = document.getElementById(`video-muro-${index}`);
+        const videoEl = document.getElementById('video-muro-' + index);
         if (videoEl) {
           if (index === itemActivoIndex) {
             videoEl.currentTime = 0;
@@ -304,16 +360,18 @@ export default function MuroEvento() {
     setItemActivoIndex(index); 
     setMuroSwipeOffset({ x: 0, y: 0 }); 
     setIsSwipingMuro(false); 
+    setPanelInteractivoAbierto(false);
   };
   
   const cerrarItemMuro = () => { 
     setItemActivoIndex(null); 
     setMuroSwipeOffset({ x: 0, y: 0 }); 
+    setPanelInteractivoAbierto(false);
     closeModal();
   };
 
-  const avanzarItemMuro = (e) => { if(e) e.stopPropagation(); if (itemActivoIndex < itemsMuro.length - 1) setItemActivoIndex(itemActivoIndex + 1); };
-  const retrocederItemMuro = (e) => { if(e) e.stopPropagation(); if (itemActivoIndex > 0) setItemActivoIndex(itemActivoIndex - 1); };
+  const avanzarItemMuro = (e) => { if(e) e.stopPropagation(); if (itemActivoIndex < itemsMuro.length - 1) { setItemActivoIndex(itemActivoIndex + 1); setPanelInteractivoAbierto(false); } };
+  const retrocederItemMuro = (e) => { if(e) e.stopPropagation(); if (itemActivoIndex > 0) { setItemActivoIndex(itemActivoIndex - 1); setPanelInteractivoAbierto(false); } };
 
   const handleMuroTouchStart = (e) => {
     const touchY = e.touches[0].clientY;
@@ -364,13 +422,15 @@ export default function MuroEvento() {
   const gridGapClass = columnasMuro === 2 ? 'gap-4' : columnasMuro === 3 ? 'gap-2' : 'gap-1';
   const mainPadding = columnasMuro === 2 ? 'p-6' : columnasMuro === 3 ? 'p-4' : 'p-2';
 
+  const itemActivo = itemActivoIndex !== null ? itemsMuro[itemActivoIndex] : null;
+  const usuarioDioLikeActivo = itemActivo ? (itemActivo.likesArray || []).includes(usuarioId) : false;
+
   return (
     <div className="min-h-screen bg-[#f8f9fa] flex flex-col font-sans overflow-hidden relative">
       
       <input type="file" accept="image/*,video/*" ref={muroInputRef} onChange={(e) => handleFileSelected(e, 'muro')} style={{ display: 'none' }} />
       <input type="file" accept="image/*,video/*" ref={historiaInputRef} onChange={(e) => handleFileSelected(e, 'historia')} style={{ display: 'none' }} />
 
-      {/* --- PANTALLA DE EDICIÓN --- */}
       {archivoEditando !== null && (
         <div className="fixed inset-0 bg-black z-[150] flex flex-col justify-between p-6 animate-fade-in">
           <div className="flex justify-between items-center text-white z-10">
@@ -412,7 +472,7 @@ export default function MuroEvento() {
             )}
 
             <div className="flex items-center gap-3 pointer-events-auto">
-              <button onClick={() => setMostrarCajaComentario(!mostrarCajaComentario)} className={`w-14 h-14 rounded-2xl backdrop-blur-md border flex items-center justify-center transition ${mostrarCajaComentario ? 'bg-blue-600 border-blue-400 text-white' : 'bg-black/40 border-white/20 text-white hover:bg-black/60'}`} title="Añadir comentario">
+              <button onClick={() => setMostrarCajaComentario(!mostrarCajaComentario)} className={'w-14 h-14 rounded-2xl backdrop-blur-md border flex items-center justify-center transition ' + (mostrarCajaComentario ? 'bg-blue-600 border-blue-400 text-white' : 'bg-black/40 border-white/20 text-white hover:bg-black/60')} title="Añadir comentario">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
               </button>
               <button onClick={publicarArchivo} disabled={subiendo} className="flex-1 py-4 bg-blue-600 text-white font-bold rounded-2xl text-base shadow-[0_10px_25px_rgba(37,99,235,0.4)] hover:bg-blue-500 transition flex items-center justify-center gap-2">
@@ -423,12 +483,11 @@ export default function MuroEvento() {
         </div>
       )}
 
-      {/* --- VISORES --- */}
       {visorHistorias !== null && (
-        <div className="fixed inset-0 z-[100] flex flex-col" style={{ backgroundColor: `rgba(0, 0, 0, ${Math.max(0, 1 - Math.abs(swipeOffset) / 400)})`, transform: `translateY(${swipeOffset}px)`, transition: swipeOffset === 0 ? 'transform 0.25s ease-out, background-color 0.25s ease-out' : 'none', touchAction: 'none' }} onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
+        <div className="fixed inset-0 z-[100] flex flex-col" style={{ backgroundColor: 'rgba(0, 0, 0, ' + Math.max(0, 1 - Math.abs(swipeOffset) / 400) + ')', transform: 'translateY(' + swipeOffset + 'px)', transition: swipeOffset === 0 ? 'transform 0.25s ease-out, background-color 0.25s ease-out' : 'none', touchAction: 'none' }} onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
           <div className="absolute top-0 w-full p-4 pt-6 flex flex-col gap-3 z-[110] bg-gradient-to-b from-black/80 to-transparent pointer-events-none">
             <div className="flex gap-1 w-full shadow-sm">
-              {visorHistorias.lista.map((_, i) => (<div key={i} className="h-1 flex-1 bg-white/30 rounded-full overflow-hidden"><div className="h-full bg-white transition-all duration-75 ease-linear" style={{ width: i === visorHistorias.currentIndex ? `${videoProgreso}%` : i < visorHistorias.currentIndex ? '100%' : '0%' }}></div></div>))}
+              {visorHistorias.lista.map((_, i) => (<div key={i} className="h-1 flex-1 bg-white/30 rounded-full overflow-hidden"><div className="h-full bg-white transition-all duration-75 ease-linear" style={{ width: i === visorHistorias.currentIndex ? videoProgreso + '%' : i < visorHistorias.currentIndex ? '100%' : '0%' }}></div></div>))}
             </div>
             <div className="flex justify-between items-center px-1 pointer-events-auto">
               <span className="text-white text-xs font-bold tracking-widest uppercase shadow-black drop-shadow-md">Historia</span>
@@ -441,35 +500,79 @@ export default function MuroEvento() {
         </div>
       )}
 
-      {itemActivoIndex !== null && (
-        <div className="fixed inset-0 z-[100] overflow-hidden backdrop-blur-sm" style={{ backgroundColor: `rgba(0, 0, 0, ${Math.max(0, 0.95 - Math.abs(muroSwipeOffset.y) / 400)})`, transition: isSwipingMuro ? 'none' : 'background-color 0.3s ease-out', touchAction: 'none' }}>
-          <button onClick={cerrarItemMuro} className="absolute top-6 right-6 text-white text-4xl font-light z-[120] w-12 h-12 flex items-center justify-center bg-black/40 rounded-full shadow-lg border border-white/10 backdrop-blur-md">×</button>
-          {itemActivoIndex > 0 && <button onClick={retrocederItemMuro} className="absolute left-4 top-1/2 -translate-y-1/2 text-white text-4xl bg-black/40 rounded-full w-12 h-12 flex items-center justify-center pb-2 z-[120] hover:bg-black/60 hidden sm:flex">‹</button>}
-          {itemActivoIndex < itemsMuro.length - 1 && <button onClick={avanzarItemMuro} className="absolute right-4 top-1/2 -translate-y-1/2 text-white text-4xl bg-black/40 rounded-full w-12 h-12 flex items-center justify-center pb-2 z-[120] hover:bg-black/60 hidden sm:flex">›</button>}
+      {itemActivoIndex !== null && itemActivo && (
+        <div className="fixed inset-0 z-[100] bg-black flex flex-col justify-between overflow-hidden">
+          
+          <div className="absolute top-0 inset-x-0 p-4 flex justify-between items-center z-[130] bg-gradient-to-b from-black/80 to-transparent">
+            <span className="text-white text-xs font-medium tracking-wide">Publicado por {itemActivo.subidoPorNombre || 'Invitado'}</span>
+            <button onClick={cerrarItemMuro} className="text-white text-3xl font-light w-10 h-10 flex items-center justify-center">×</button>
+          </div>
 
-          <div className="relative w-full h-full" style={{ transform: `translateY(${muroSwipeOffset.y}px)`, transition: isSwipingMuro ? 'none' : 'transform 0.3s ease-out' }} onTouchStart={handleMuroTouchStart} onTouchMove={handleMuroTouchMove} onTouchEnd={handleMuroTouchEnd}>
-            {itemsMuro.map((item, index) => {
-              if (Math.abs(index - itemActivoIndex) > 2) return null;
-              return (
-                <div key={item.id} className="absolute inset-0 w-full h-full flex items-center justify-center" style={{ transform: `translateX(calc(${(index - itemActivoIndex) * 100}% + ${muroSwipeOffset.x}px))`, transition: isSwipingMuro ? 'none' : 'transform 0.35s cubic-bezier(0.25, 0.8, 0.25, 1)' }}>
-                  {item.tipo === 'video' ? (
-                    <video id={`video-muro-${index}`} src={item.url} playsInline controls={index === itemActivoIndex} onTimeUpdate={manejarTiempoMuro} className={`max-w-full max-h-full object-contain ${index === itemActivoIndex ? 'pointer-events-auto z-50' : 'pointer-events-none'}`} />
+          <div className="relative w-full h-full flex items-center justify-center">
+            {itemActivo.tipo === 'video' ? (
+              <video id="video-muro-activo" src={itemActivo.url} playsInline controls autoPlay onTimeUpdate={manejarTiempoMuro} className="max-w-full max-h-full object-contain" />
+            ) : (
+              <img src={itemActivo.url} className="max-w-full max-h-full object-contain" alt="Detalle" />
+            )}
+          </div>
+
+          <div className="absolute bottom-0 inset-x-0 p-6 pb-8 bg-gradient-to-t from-black via-black/80 to-transparent flex flex-col gap-4 z-[130]">
+            
+            <div className="flex items-center justify-end gap-6 text-white">
+              
+              <button onClick={() => setPanelInteractivoAbierto(!panelInteractivoAbierto)} className="flex items-center gap-2 text-sm font-semibold transition active:scale-110">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                {(itemActivo.comentarios || []).length > 0 && <span>{(itemActivo.comentarios || []).length}</span>}
+              </button>
+
+              <button 
+                onClick={(e) => handleLike(e, itemActivo.id, itemActivo.likesArray)}
+                className="flex items-center gap-2 text-sm font-semibold transition active:scale-125"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={usuarioDioLikeActivo ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={'w-6 h-6 ' + (usuarioDioLikeActivo ? 'text-red-500' : 'text-white')}><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                {(itemActivo.likesArray || []).length > 0 && <span>{(itemActivo.likesArray || []).length}</span>}
+              </button>
+
+            </div>
+
+            {panelInteractivoAbierto && (
+              <div className="bg-zinc-900/95 backdrop-blur-md rounded-2xl p-4 max-h-64 flex flex-col gap-3 border border-white/10 animate-fade-in shadow-2xl">
+                <div className="flex justify-between items-center border-b border-white/10 pb-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-zinc-300">Comentarios</span>
+                  <button onClick={() => setPanelInteractivoAbierto(false)} className="text-zinc-400 text-lg">×</button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto flex flex-col gap-2.5 pr-1">
+                  {(itemActivo.comentarios || []).length === 0 ? (
+                    <p className="text-xs text-zinc-500 text-center py-4">Aún no hay comentarios. ¡Sé el primero en comentar!</p>
                   ) : (
-                    <img src={item.url} className="max-w-full max-h-full object-contain pointer-events-none" alt="Visor" />
-                  )}
-                  {item.comentario && (
-                    <div className="absolute bottom-0 left-0 w-full p-8 pt-20 bg-gradient-to-t from-black via-black/80 to-transparent pointer-events-none z-40">
-                      <p className="text-white text-center leading-relaxed font-light text-lg drop-shadow-md">"{item.comentario}"</p>
-                    </div>
+                    (itemActivo.comentarios || []).map(c => (
+                      <div key={c.id} className="bg-white/5 p-2.5 rounded-xl flex flex-col gap-1">
+                        <span className="text-[11px] font-bold text-blue-400">{c.autorNombre}</span>
+                        <p className="text-xs text-zinc-200 leading-relaxed">{c.texto}</p>
+                      </div>
+                    ))
                   )}
                 </div>
-              );
-            })}
+
+                <form onSubmit={enviarComentario} className="flex gap-2 pt-1">
+                  <input 
+                    type="text" 
+                    placeholder="Escribe un comentario..." 
+                    value={nuevoComentarioTexto}
+                    onChange={(e) => setNuevoComentarioTexto(e.target.value)}
+                    className="flex-1 bg-white/10 text-white placeholder-zinc-400 px-3 py-2.5 rounded-xl outline-none text-xs border border-white/10"
+                  />
+                  <button type="submit" className="bg-blue-600 text-white px-4 py-2.5 rounded-xl text-xs font-bold shadow-md hover:bg-blue-500 transition">Enviar</button>
+                </form>
+              </div>
+            )}
+
           </div>
+
         </div>
       )}
 
-      {/* --- CABECERA Y CARRUSEL --- */}
       <header className="bg-white pt-4 pb-5 shadow-sm sticky top-0 z-10 rounded-b-[2rem] flex flex-col">
         <div className="flex items-center justify-between px-6">
           <button onClick={() => router.push('/')} className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-50 text-gray-600">←</button>
@@ -487,9 +590,9 @@ export default function MuroEvento() {
           {historiasOrdenadas.map((historia, index) => {
             const visto = historiasVistas.includes(historia.id);
             return (
-              <button key={historia.id} onClick={() => abrirHistoria(index)} className={`flex-shrink-0 relative rounded-[16px] p-[2px] transition-all transform hover:scale-95 ${visto ? 'bg-gray-300' : 'bg-blue-500'}`}>
+              <button key={historia.id} onClick={() => abrirHistoria(index)} className={'flex-shrink-0 relative rounded-[16px] p-[2px] transition-all transform hover:scale-95 ' + (visto ? 'bg-gray-300' : 'bg-blue-500')}>
                 <div className="w-14 h-20 bg-black rounded-[14px] overflow-hidden border-[2px] border-white relative flex items-center justify-center">
-                  <video src={historia.url} className={`w-full h-full object-cover transition-opacity duration-300 ${visto ? 'opacity-50' : 'opacity-80'}`} />
+                  <video src={historia.url} className={'w-full h-full object-cover transition-opacity duration-300 ' + (visto ? 'opacity-50' : 'opacity-80')} />
                   {!visto && <span className="absolute bottom-1 bg-black/60 text-white px-1.5 py-0.5 rounded text-[8px] font-bold tracking-widest">NUEVO</span>}
                 </div>
               </button>
@@ -498,9 +601,8 @@ export default function MuroEvento() {
         </div>
       </header>
 
-      {/* --- MURO CON TARJETAS LIMPIAS --- */}
       <main 
-        className={`flex-1 overflow-y-auto pb-32 transition-all duration-300 ${mainPadding}`}
+        className={'flex-1 overflow-y-auto pb-32 transition-all duration-300 ' + mainPadding}
         onTouchStart={handlePinchStart}
         onTouchMove={handlePinchMove}
         onTouchEnd={handlePinchEnd}
@@ -508,11 +610,12 @@ export default function MuroEvento() {
         {itemsMuro.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center text-gray-400 mt-10"><div className="text-6xl mb-4 opacity-30">📷</div><p className="text-sm font-medium">Aún no hay contenido en el muro.</p></div>
         ) : (
-          <div className={`grid ${gridColsClass} ${gridGapClass} auto-rows-fr transition-all duration-300`}>
+          <div className={'grid ' + gridColsClass + ' ' + gridGapClass + ' auto-rows-fr transition-all duration-300'}>
             {itemsMuro.map((item, index) => {
-              const esDueno = usuario && item.subidoPor === usuario.uid;
-              const tieneLikes = item.likes > 0;
-              const corazonRojo = esDueno && tieneLikes;
+              const totalLikes = (item.likesArray || []).length;
+              const totalComentarios = (item.comentarios || []).length;
+              const esDueno = item.subidoPor === usuarioId;
+              const corazonRojo = esDueno && totalLikes > 0;
 
               return (
                 <div key={item.id} onClick={() => abrirItemMuro(index)} className="relative aspect-square w-full rounded-2xl overflow-hidden bg-zinc-900 shadow-sm transition-all hover:scale-[0.98] cursor-pointer">
@@ -529,24 +632,21 @@ export default function MuroEvento() {
                     </div>
                   )}
 
-                  {/* Iconos flotantes puros sin recuadro y con condición de contador > 0 */}
                   <div className="absolute bottom-2 right-2.5 flex items-center gap-3 text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
                     
-                    {/* Comentarios */}
-                    {item.comentariosCount > 0 && (
+                    {totalComentarios > 0 && (
                       <div className="flex items-center gap-1 text-xs font-semibold">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
-                        <span>{item.comentariosCount}</span>
+                        <span>{totalComentarios}</span>
                       </div>
                     )}
 
-                    {/* Me Gusta (Corazón) */}
                     <button 
-                      onClick={(e) => handleLike(e, item.id)}
+                      onClick={(e) => handleLike(e, item.id, item.likesArray)}
                       className="flex items-center gap-1 text-xs font-semibold transition active:scale-125"
                     >
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={corazonRojo ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`w-4 h-4 ${corazonRojo ? 'text-red-500' : 'text-white'}`}><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-                      {item.likes > 0 && <span>{item.likes}</span>}
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={corazonRojo ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={'w-4 h-4 ' + (corazonRojo ? 'text-red-500' : 'text-white')}><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                      {totalLikes > 0 && <span>{totalLikes}</span>}
                     </button>
 
                   </div>
@@ -558,7 +658,6 @@ export default function MuroEvento() {
         )}
       </main>
 
-      {/* BOTÓN FLOTANTE DE ZOOM (Lupita elegante y minimalista, sin numerito de cuadros) */}
       {columnasMuro > 2 && (
         <div className="fixed bottom-28 right-6 z-20 animate-fade-in">
           <button 
@@ -571,9 +670,8 @@ export default function MuroEvento() {
         </div>
       )}
 
-      {/* BOTÓN "+" PRINCIPAL DEL MURO */}
       <div className="fixed bottom-10 w-full flex justify-center z-20 pointer-events-none">
-        <button onClick={() => muroInputRef.current.click()} disabled={subiendo} className={`pointer-events-auto bg-blue-600 text-white w-16 h-16 rounded-full shadow-[0_10px_25px_rgba(37,99,235,0.4)] flex items-center justify-center text-4xl pb-1 hover:bg-blue-700 transition transform ${subiendo ? 'opacity-50 scale-95' : 'hover:-translate-y-1'}`}>
+        <button onClick={() => muroInputRef.current.click()} disabled={subiendo} className={'pointer-events-auto bg-blue-600 text-white w-16 h-16 rounded-full shadow-[0_10px_25px_rgba(37,99,235,0.4)] flex items-center justify-center text-4xl pb-1 hover:bg-blue-700 transition transform ' + (subiendo ? 'opacity-50 scale-95' : 'hover:-translate-y-1')}>
           {subiendo ? <span className="text-lg">⏳</span> : '+'}
         </button>
       </div>
