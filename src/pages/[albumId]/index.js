@@ -193,7 +193,9 @@ export default function MuroEvento() {
       video.playsInline = true;
 
       video.onloadedmetadata = () => {
-        const durationToRecord = Math.min(maxDuration, video.duration - startTime);
+        // Si el video dura menos que el límite, respeta lo que dura exactamente
+        const duracionEfectiva = Math.min(video.duration, maxDuration);
+        const durationToRecord = Math.min(duracionEfectiva, video.duration - startTime);
         video.currentTime = startTime;
 
         video.onseeked = () => {
@@ -316,7 +318,8 @@ export default function MuroEvento() {
   if (cargando) return <div className="min-h-screen flex items-center justify-center font-sans">Cargando...</div>;
   if (!album) return null;
 
-  const maxDuracionActual = archivoEditando?.destino === 'historia' ? 10 : 20;
+  const maxDuracionPermitida = archivoEditando?.destino === 'historia' ? 10 : 20;
+  const necesitaRecorte = videoDuracion > maxDuracionPermitida;
 
   return (
     <div className="min-h-screen bg-[#f8f9fa] flex flex-col font-sans overflow-hidden relative">
@@ -355,21 +358,21 @@ export default function MuroEvento() {
 
           <div className="relative z-10 flex flex-col gap-3 pb-6 pointer-events-none">
             
-            {/* LÍNEA DE TIEMPO ÚNICA SIN CONTROLES NATIVOS DUPLICADOS */}
-            {archivoEditando.tipo === 'video' && videoDuracion > maxDuracionActual && (
-              <div className="w-full bg-black/70 backdrop-blur-md p-4 rounded-2xl flex flex-col gap-2 pointer-events-auto border border-white/10 shadow-2xl">
+            {/* BLOQUE DE RECORTE FIJO (Aparece solo si el video supera el límite de 10s o 20s) */}
+            {archivoEditando.tipo === 'video' && necesitaRecorte && (
+              <div className="w-full bg-black/80 backdrop-blur-md p-4 rounded-2xl flex flex-col gap-2 pointer-events-auto border border-white/20 shadow-2xl">
                 <div className="flex justify-between text-xs text-zinc-300 font-medium">
-                  <span>Selecciona fragmento ({maxDuracionActual}s)</span>
-                  <span className="text-blue-400 font-bold">{tiempoInicio.toFixed(1)}s al {(tiempoInicio + maxDuracionActual).toFixed(1)}s</span>
+                  <span>Bloque de selección ({maxDuracionPermitida}s fijos)</span>
+                  <span className="text-blue-400 font-bold">{tiempoInicio.toFixed(1)}s a {(tiempoInicio + maxDuracionPermitida).toFixed(1)}s</span>
                 </div>
                 <input 
                   type="range" 
                   min="0" 
-                  max={Math.max(0, videoDuracion - maxDuracionActual)} 
+                  max={Math.max(0, videoDuracion - maxDuracionPermitida)} 
                   step="0.1"
                   value={tiempoInicio}
                   onChange={handleTimelineChange}
-                  className="w-full accent-blue-500 cursor-pointer h-2 bg-zinc-700 rounded-lg appearance-none"
+                  className="w-full accent-blue-500 cursor-pointer h-3 bg-zinc-700 rounded-lg appearance-none"
                 />
               </div>
             )}
