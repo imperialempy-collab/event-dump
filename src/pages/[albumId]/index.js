@@ -16,14 +16,12 @@ export default function MuroEvento() {
   const [archivos, setArchivos] = useState([]);
   const [subiendo, setSubiendo] = useState(false);
 
-  // Inputs separados para Muro e Historia
   const muroInputRef = useRef(null);
   const historiaInputRef = useRef(null);
 
   const [archivoEditando, setArchivoEditando] = useState(null); 
   const [mostrarCajaComentario, setMostrarCajaComentario] = useState(false);
 
-  // Estados de visores
   const [historiasVistas, setHistoriasVistas] = useState([]);
   const [visorHistorias, setVisorHistorias] = useState(null);
   const [videoProgreso, setVideoProgreso] = useState(0);
@@ -60,9 +58,30 @@ export default function MuroEvento() {
     return () => unsubscribe();
   }, [albumId]);
 
+  // --- CONTROL DEL BOTÓN ATRÁS NATIVO DEL TELÉFONO ---
+  useEffect(() => {
+    const handleHashChange = () => {
+      if (window.location.hash !== '#viewer') {
+        setItemActivoIndex(null);
+        setVisorHistorias(null);
+        setArchivoEditando(null);
+      }
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
+  const openModal = () => {
+    if (window.location.hash !== '#viewer') window.location.hash = 'viewer';
+  };
+
+  const closeModal = () => {
+    if (window.location.hash === '#viewer') window.history.back();
+  };
+  // ----------------------------------------------------
+
   const getTime = (item) => item.creadoEn?.toMillis ? item.creadoEn.toMillis() : (item.creadoEn ? new Date(item.creadoEn).getTime() : 0);
 
-  // REGLA DE ORO DE 5 DÍAS: Todo se borra estrictamente a los 5 días de la fecha del evento
   const archivosValidos = archivos.filter(a => (Date.now() - 5 * 24 * 60 * 60 * 1000) < getTime(a));
   const itemsMuro = archivosValidos.filter(a => a.tipo === 'imagen' || a.destino === 'muro');
   
@@ -82,6 +101,7 @@ export default function MuroEvento() {
     const file = e.target.files[0];
     if (!file) return;
 
+    openModal();
     const tipo = file.type.startsWith('video/') ? 'video' : 'imagen';
     setArchivoEditando({
       file,
@@ -94,6 +114,11 @@ export default function MuroEvento() {
     e.target.value = null;
   };
 
+  const cancelarEdicion = () => {
+    setArchivoEditando(null);
+    closeModal();
+  };
+
   const publicarArchivo = async () => {
     if (!archivoEditando) return;
     setSubiendo(true);
@@ -103,7 +128,6 @@ export default function MuroEvento() {
       if (archivoEditando.tipo === 'imagen') {
         archivoFinal = await comprimirImagen(archivoEditando.file);
       }
-      // Los videos se suben directamente sin recortes lentos
 
       const extension = archivoFinal.name.split('.').pop() || (archivoEditando.tipo === 'video' ? 'mp4' : 'jpg');
       const nombreArchivo = `${Date.now()}-${Math.random().toString(36).substring(2)}.${extension}`;
@@ -122,6 +146,7 @@ export default function MuroEvento() {
       });
 
       setArchivoEditando(null);
+      closeModal();
     } catch (error) {
       console.error(error);
       alert("Error al subir el archivo.");
@@ -186,28 +211,51 @@ export default function MuroEvento() {
       localStorage.setItem('historiasVistas_' + albumId, JSON.stringify(nuevasVistas));
     }
   };
-  const abrirHistoria = (index) => { setVisorHistorias({ lista: historiasOrdenadas, currentIndex: index }); setVideoProgreso(0); setSwipeOffset(0); marcarComoVista(historiasOrdenadas[index].id); };
+
+  const abrirHistoria = (index) => { 
+    openModal();
+    setVisorHistorias({ lista: historiasOrdenadas, currentIndex: index }); 
+    setVideoProgreso(0); 
+    setSwipeOffset(0); 
+    marcarComoVista(historiasOrdenadas[index].id); 
+  };
   
-  // Limitar visualmente las historias a 10s
   const manejarTiempoHistoria = (e) => {
-      if (e.target.currentTime >= 10) {
-          avanzarHistoria();
-      }
-  }
+      if (e.target.currentTime >= 10) avanzarHistoria();
+  };
 
   const avanzarHistoria = (e) => { if (e) e.stopPropagation(); if (visorHistorias.currentIndex < visorHistorias.lista.length - 1) { setVisorHistorias({ ...visorHistorias, currentIndex: visorHistorias.currentIndex + 1 }); setVideoProgreso(0); marcarComoVista(visorHistorias.lista[visorHistorias.currentIndex + 1].id); } else cerrarVisorHistorias(); };
   const retrocederHistoria = (e) => { if (e) e.stopPropagation(); if (visorHistorias.currentIndex > 0) { setVisorHistorias({ ...visorHistorias, currentIndex: visorHistorias.currentIndex - 1 }); setVideoProgreso(0); marcarComoVista(visorHistorias.lista[visorHistorias.currentIndex - 1].id); } };
-  const cerrarVisorHistorias = () => { setVisorHistorias(null); setVideoProgreso(0); setSwipeOffset(0); };
+  
+  const cerrarVisorHistorias = () => { 
+    setVisorHistorias(null); 
+    setVideoProgreso(0); 
+    setSwipeOffset(0); 
+    closeModal();
+  };
+
   const handleTimeUpdate = (e) => { 
       if (e.target.duration > 0) setVideoProgreso((e.target.currentTime / Math.min(e.target.duration, 10)) * 100); 
       manejarTiempoHistoria(e);
   };
+
   const handleTouchStart = (e) => { touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }; setSwipeOffset(0); };
   const handleTouchMove = (e) => { const diffY = e.touches[0].clientY - touchStartRef.current.y; const diffX = e.touches[0].clientX - touchStartRef.current.x; if (Math.abs(diffY) > Math.abs(diffX) && Math.abs(diffY) > 10) setSwipeOffset(diffY); };
   const handleTouchEnd = (e) => { const diffY = e.changedTouches[0].clientY - touchStartRef.current.y; const diffX = e.changedTouches[0].clientX - touchStartRef.current.x; if (Math.abs(diffY) > Math.abs(diffX) && Math.abs(diffY) > 80) cerrarVisorHistorias(); else setSwipeOffset(0); };
 
-  const abrirItemMuro = (index) => { setItemActivoIndex(index); setMuroSwipeOffset({ x: 0, y: 0 }); setIsSwipingMuro(false); };
-  const cerrarItemMuro = () => { setItemActivoIndex(null); setMuroSwipeOffset({ x: 0, y: 0 }); };
+  const abrirItemMuro = (index) => { 
+    openModal();
+    setItemActivoIndex(index); 
+    setMuroSwipeOffset({ x: 0, y: 0 }); 
+    setIsSwipingMuro(false); 
+  };
+  
+  const cerrarItemMuro = () => { 
+    setItemActivoIndex(null); 
+    setMuroSwipeOffset({ x: 0, y: 0 }); 
+    closeModal();
+  };
+
   const avanzarItemMuro = (e) => { if(e) e.stopPropagation(); if (itemActivoIndex < itemsMuro.length - 1) setItemActivoIndex(itemActivoIndex + 1); };
   const retrocederItemMuro = (e) => { if(e) e.stopPropagation(); if (itemActivoIndex > 0) setItemActivoIndex(itemActivoIndex - 1); };
 
@@ -246,13 +294,12 @@ export default function MuroEvento() {
     else setMuroSwipeOffset({ x: 0, y: 0 }); 
   };
 
-  // Limitar visualmente los videos del muro a 20s
   const manejarTiempoMuro = (e) => {
       if (e.target.currentTime >= 20) {
           e.target.currentTime = 0;
           e.target.play();
       }
-  }
+  };
 
   if (cargando) return <div className="min-h-screen flex items-center justify-center font-sans">Cargando...</div>;
   if (!album) return null;
@@ -263,12 +310,12 @@ export default function MuroEvento() {
       <input type="file" accept="image/*,video/*" ref={muroInputRef} onChange={(e) => handleFileSelected(e, 'muro')} style={{ display: 'none' }} />
       <input type="file" accept="image/*,video/*" ref={historiaInputRef} onChange={(e) => handleFileSelected(e, 'historia')} style={{ display: 'none' }} />
 
-      {/* --- PANTALLA DE EDICIÓN (LIMPIA Y RÁPIDA) --- */}
+      {/* --- PANTALLA DE EDICIÓN --- */}
       {archivoEditando !== null && (
         <div className="fixed inset-0 bg-black z-[150] flex flex-col justify-between p-6 animate-fade-in">
           
           <div className="flex justify-between items-center text-white z-10">
-            <button onClick={() => setArchivoEditando(null)} className="text-sm font-medium text-zinc-400 hover:text-white transition">Cancelar</button>
+            <button onClick={cancelarEdicion} className="text-sm font-medium text-zinc-400 hover:text-white transition">Cancelar</button>
             <span className="text-xs font-bold uppercase tracking-widest text-zinc-300">
               {archivoEditando.destino === 'muro' ? 'Nueva Publicación (Muro)' : 'Nueva Historia'}
             </span>
@@ -279,10 +326,7 @@ export default function MuroEvento() {
             {archivoEditando.tipo === 'video' ? (
               <video 
                 src={archivoEditando.previewUrl} 
-                autoPlay
-                loop
-                muted
-                playsInline
+                autoPlay loop muted playsInline
                 className="w-full h-full object-contain pointer-events-none" 
               />
             ) : (
@@ -292,11 +336,11 @@ export default function MuroEvento() {
 
           <div className="relative z-10 flex flex-col gap-3 pb-6 pointer-events-none">
             
-            {/* Aviso simple */}
-             {archivoEditando.tipo === 'video' && (
-                <div className="w-full text-center">
-                   <span className="text-xs text-white/80 bg-black/40 px-3 py-1 rounded-full backdrop-blur-sm">
-                       Se mostrarán los primeros {archivoEditando.destino === 'historia' ? '10' : '20'} segundos
+            {/* Aviso exclusivo para Historias */}
+             {archivoEditando.tipo === 'video' && archivoEditando.destino === 'historia' && (
+                <div className="w-full text-center mb-1">
+                   <span className="text-xs text-white/80 bg-black/40 px-3 py-1.5 rounded-full backdrop-blur-sm border border-white/10 shadow-lg">
+                       Se mostrarán solo los 10 segundos
                    </span>
                 </div>
             )}
@@ -331,7 +375,7 @@ export default function MuroEvento() {
                 disabled={subiendo}
                 className="flex-1 py-4 bg-blue-600 text-white font-bold rounded-2xl text-base shadow-[0_10px_25px_rgba(37,99,235,0.4)] hover:bg-blue-500 transition flex items-center justify-center gap-2"
               >
-                {subiendo ? <span>⏳ Subiendo rápido...</span> : <span>Publicar</span>}
+                {subiendo ? <span>⏳ Subiendo...</span> : <span>Publicar</span>}
               </button>
             </div>
 
