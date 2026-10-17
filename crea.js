@@ -21,15 +21,12 @@ export default function MuroEvento() {
   const [archivos, setArchivos] = useState([]);
   const [subiendo, setSubiendo] = useState(false);
 
-  // Inputs separados para Muro e Historia
   const muroInputRef = useRef(null);
   const historiaInputRef = useRef(null);
 
-  // Estado del archivo en edición
   const [archivoEditando, setArchivoEditando] = useState(null); 
   const [mostrarCajaComentario, setMostrarCajaComentario] = useState(false);
 
-  // Recortador de video con línea de tiempo única
   const videoPreviewRef = useRef(null);
   const [videoDuracion, setVideoDuracion] = useState(0);
   const [tiempoInicio, setTiempoInicio] = useState(0);
@@ -350,9 +347,11 @@ export default function MuroEvento() {
                 ref={videoPreviewRef}
                 src={archivoEditando.previewUrl} 
                 onLoadedMetadata={handleVideoLoadedMetadata}
-                controls 
+                autoPlay
+                loop
+                muted
                 playsInline
-                className="w-full h-full object-contain" 
+                className="w-full h-full object-contain pointer-events-none" 
               />
             ) : (
               <img src={archivoEditando.previewUrl} className="w-full h-full object-contain" alt="Preview" />
@@ -361,7 +360,7 @@ export default function MuroEvento() {
 
           <div className="relative z-10 flex flex-col gap-3 pb-6 pointer-events-none">
             
-            {/* LÍNEA DE TIEMPO ÚNICA (Único slider con ventana de selección de 10s o 20s) */}
+            {/* LÍNEA DE TIEMPO ÚNICA SIN CONTROLES NATIVOS DUPLICADOS */}
             {archivoEditando.tipo === 'video' && videoDuracion > maxDuracionActual && (
               <div className="w-full bg-black/70 backdrop-blur-md p-4 rounded-2xl flex flex-col gap-2 pointer-events-auto border border-white/10 shadow-2xl">
                 <div className="flex justify-between text-xs text-zinc-300 font-medium">
@@ -541,9 +540,9 @@ export default function MuroEvento() {
 
 fs.writeFileSync(path.join(__dirname, 'src/pages/[albumId]/index.js'), muroCode.trim());
 
-console.log("⏳ Subiendo línea de tiempo única de recorte a la rama principal (main)...");
+console.log("⏳ Subiendo corrección de línea de tiempo única a la rama principal (main)...");
 try {
-  execSync('git add . && git commit -m "Implementada linea de tiempo unica con ventana de recorte inteligente de 10s o 20s segun destino" && git push origin main', { stdio: 'inherit' });
+  execSync('git add . && git commit -m "Eliminada barra de controles nativa duplicada, dejando una sola linea de tiempo interactiva limpia" && git push origin main', { stdio: 'inherit' });
   console.log("🚀 ¡Actualización subida con éxito! Vercel está aplicando los cambios.");
 } catch (err) {
   console.error("Error al subir a Git:", err);
