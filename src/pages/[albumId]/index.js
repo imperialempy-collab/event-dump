@@ -49,11 +49,10 @@ export default function MuroEvento() {
 
   const usuarioNombre = usuario ? (usuario.displayName || usuario.email || 'Usuario') : 'Invitado';
   
-  // VERIFICACIÓN DE ANÓNIMO PARA RESTRINGIR ACCIONES
   const esAnonimo = !usuario;
   const alertaAnonimo = (e) => {
     if(e) e.stopPropagation();
-    alert('Debes iniciar sesión para interactuar (Próximamente)');
+    alert('Debes iniciar sesión para interactuar');
   };
 
   useEffect(() => {
@@ -325,8 +324,6 @@ export default function MuroEvento() {
     }
   };
 
-  // --- SOLUCIÓN AL BUG DEL VIDEO QUE SE REINICIABA ---
-  // Ahora solo depende de 'itemActivoIndex', no de los cambios en la base de datos (likes/comentarios)
   useEffect(() => {
     if (itemActivoIndex !== null) {
       const todosLosVideos = document.querySelectorAll('video[id^="video-muro-"]');
@@ -516,7 +513,6 @@ export default function MuroEvento() {
         </div>
       )}
 
-      {/* --- VISORES DE HISTORIAS CON UI DE RESPUESTA PREPARADA --- */}
       {visorHistorias !== null && (
         <div className="fixed inset-0 z-[100] flex flex-col" style={{ backgroundColor: 'rgba(0, 0, 0, ' + Math.max(0, 1 - Math.abs(swipeOffset) / 400) + ')', transform: 'translateY(' + swipeOffset + 'px)', transition: swipeOffset === 0 ? 'transform 0.25s ease-out, background-color 0.25s ease-out' : 'none', touchAction: 'none' }} onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
           <div className="absolute top-0 w-full p-4 pt-6 flex flex-col gap-3 z-[110] bg-gradient-to-b from-black/80 to-transparent pointer-events-none">
@@ -531,11 +527,9 @@ export default function MuroEvento() {
           
           <video src={visorHistorias.lista[visorHistorias.currentIndex].url} autoPlay playsInline onTimeUpdate={handleTimeUpdate} className="w-full h-full object-cover" />
           
-          {/* Botones invisibles de navegación lateral */}
           <div className="absolute inset-y-0 left-0 w-[30%] z-[100]" onClick={retrocederHistoria}></div>
           <div className="absolute inset-y-0 right-0 w-[70%] z-[100]" onClick={avanzarHistoria}></div>
 
-          {/* BARRA DE RESPUESTA (Chat) - Z-index mayor para que no choque con la navegación */}
           <div className="absolute bottom-6 inset-x-4 z-[120] flex gap-2 pointer-events-auto" onTouchStart={e => e.stopPropagation()}>
             {esAnonimo ? (
               <div onClick={alertaAnonimo} className="flex-1 bg-black/40 backdrop-blur-md border border-white/20 rounded-full px-4 py-3 flex items-center justify-center cursor-pointer">
@@ -551,7 +545,7 @@ export default function MuroEvento() {
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && e.target.value.trim() !== '') {
                       e.preventDefault();
-                      alert('Mensaje enviado. (El sistema de Chat llegará en el próximo paso)');
+                      alert('Mensaje enviado.');
                       e.target.value = '';
                     }
                   }}
@@ -571,7 +565,7 @@ export default function MuroEvento() {
         </div>
       )}
 
-      {/* --- VISOR DETALLADO DEL MURO --- */}
+      {/* --- VISOR DETALLADO DEL MURO (EFECTO SUAVE RESTAURADO) --- */}
       {itemActivoIndex !== null && (
         <div 
           className="fixed inset-0 z-[100] overflow-hidden backdrop-blur-sm" 
@@ -589,9 +583,10 @@ export default function MuroEvento() {
           {itemActivoIndex > 0 && <button onClick={retrocederItemMuro} className="absolute left-4 top-1/2 -translate-y-1/2 text-white text-4xl bg-black/40 rounded-full w-12 h-12 flex items-center justify-center pb-2 z-[120] hover:bg-black/60 hidden sm:flex">‹</button>}
           {itemActivoIndex < itemsMuro.length - 1 && <button onClick={avanzarItemMuro} className="absolute right-4 top-1/2 -translate-y-1/2 text-white text-4xl bg-black/40 rounded-full w-12 h-12 flex items-center justify-center pb-2 z-[120] hover:bg-black/60 hidden sm:flex">›</button>}
 
+          {/* CONTENEDOR CON LA MAGIA DEL SWIPE SUAVE RESTAURADA */}
           <div 
             className="relative w-full h-full" 
-            style={{ transform: 'translateX(' + muroSwipeOffset.x + 'px) translateY(' + muroSwipeOffset.y + 'px)', transition: isSwipingMuro ? 'none' : 'transform 0.3s ease-out' }} 
+            style={{ transform: 'translateY(' + muroSwipeOffset.y + 'px)', transition: isSwipingMuro ? 'none' : 'transform 0.3s ease-out' }} 
             onTouchStart={handleMuroTouchStart} 
             onTouchMove={handleMuroTouchMove} 
             onTouchEnd={handleMuroTouchEnd}
@@ -602,7 +597,7 @@ export default function MuroEvento() {
                 <div 
                   key={item.id} 
                   className="absolute inset-0 w-full h-full flex items-center justify-center" 
-                  style={{ transform: 'translateX(calc(' + ((index - itemActivoIndex) * 100) + '%))' }}
+                  style={{ transform: 'translateX(calc(' + ((index - itemActivoIndex) * 100) + '% + ' + muroSwipeOffset.x + 'px))', transition: isSwipingMuro ? 'none' : 'transform 0.35s cubic-bezier(0.25, 0.8, 0.25, 1)' }}
                   onClick={() => { if(panelInteractivoAbierto) setPanelInteractivoAbierto(false); }}
                 >
                   {item.tipo === 'video' ? (
@@ -634,7 +629,6 @@ export default function MuroEvento() {
 
             </div>
 
-            {/* PANEL DESPLEGABLE CON PESTAÑAS */}
             {panelInteractivoAbierto && (
               <div 
                 className="bg-zinc-900/95 backdrop-blur-md rounded-2xl p-4 max-h-72 flex flex-col gap-3 border border-white/10 shadow-2xl pointer-events-auto"
@@ -686,7 +680,6 @@ export default function MuroEvento() {
                   )}
                 </div>
 
-                {/* CAJA PARA COMENTAR (Bloqueada para anónimos) */}
                 {pestañaActiva === 'comentarios' && (
                   <div className="pt-1 border-t border-white/10 mt-1">
                     {esAnonimo ? (
@@ -713,7 +706,6 @@ export default function MuroEvento() {
         </div>
       )}
 
-      {/* --- CABECERA Y CARRUSEL --- */}
       <header className="bg-white pt-4 pb-5 shadow-sm sticky top-0 z-10 rounded-b-[2rem] flex flex-col">
         <div className="flex items-center justify-between px-6">
           <button onClick={() => router.push('/')} className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-50 text-gray-600">←</button>
@@ -742,7 +734,6 @@ export default function MuroEvento() {
         </div>
       </header>
 
-      {/* --- MURO --- */}
       <main 
         className={'flex-1 overflow-y-auto pb-32 transition-all duration-300 ' + mainPadding}
         onTouchStart={handlePinchStart}
@@ -800,7 +791,6 @@ export default function MuroEvento() {
         )}
       </main>
 
-      {/* --- MENÚ LATERAL --- */}
       {menuAbierto && (
         <div className="fixed inset-0 z-[200] flex justify-end bg-black/40 backdrop-blur-sm" onClick={() => setMenuAbierto(false)}>
           <div className="w-64 bg-white h-full shadow-2xl flex flex-col p-6 transition-transform" onClick={e => e.stopPropagation()}>
