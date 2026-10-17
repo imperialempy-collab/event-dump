@@ -21,15 +21,15 @@ export default function MuroEvento() {
   const [archivos, setArchivos] = useState([]);
   const [subiendo, setSubiendo] = useState(false);
 
-  // Inputs separados: uno exclusivo para Muro, otro para Historia
+  // Inputs separados para Muro e Historia
   const muroInputRef = useRef(null);
   const historiaInputRef = useRef(null);
 
-  // Estado del archivo actual en edición (Pantalla completa inmersiva)
-  const [archivoEditando, setArchivoEditando] = useState(null); // { file, previewUrl, tipo, destino ('muro'|'historia'), comentario: '', trimStart: 0 }
+  // Estado del archivo en edición
+  const [archivoEditando, setArchivoEditando] = useState(null); 
   const [mostrarCajaComentario, setMostrarCajaComentario] = useState(false);
 
-  // Recortador de video
+  // Recortador de video con línea de tiempo única
   const videoPreviewRef = useRef(null);
   const [videoDuracion, setVideoDuracion] = useState(0);
   const [tiempoInicio, setTiempoInicio] = useState(0);
@@ -73,7 +73,7 @@ export default function MuroEvento() {
 
   const getTime = (item) => item.creadoEn?.toMillis ? item.creadoEn.toMillis() : (item.creadoEn ? new Date(item.creadoEn).getTime() : 0);
 
-  // REGLA DE ORO DE 5 DÍAS: Absolutamente todo se borra estrictamente a los 5 días de la fecha del evento
+  // REGLA DE ORO DE 5 DÍAS: Todo se borra estrictamente a los 5 días de la fecha del evento
   const archivosValidos = archivos.filter(a => (Date.now() - 5 * 24 * 60 * 60 * 1000) < getTime(a));
   const itemsMuro = archivosValidos.filter(a => a.tipo === 'imagen' || a.destino === 'muro');
   
@@ -89,7 +89,6 @@ export default function MuroEvento() {
     return aVisto ? 1 : -1;
   });
 
-  // Manejadores de selección de galería
   const handleFileSelected = (e, destino) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -113,7 +112,7 @@ export default function MuroEvento() {
     setTiempoInicio(0);
   };
 
-  const handleSliderChange = (e) => {
+  const handleTimelineChange = (e) => {
     const val = parseFloat(e.target.value);
     setTiempoInicio(val);
     setArchivoEditando(prev => ({ ...prev, trimStart: val }));
@@ -122,7 +121,6 @@ export default function MuroEvento() {
     }
   };
 
-  // --- PROCESAMIENTO Y SUBIDA FINAL ---
   const publicarArchivo = async () => {
     if (!archivoEditando) return;
     setSubiendo(true);
@@ -155,7 +153,7 @@ export default function MuroEvento() {
       setArchivoEditando(null);
     } catch (error) {
       console.error(error);
-      alert("Hubo un error al subir el archivo.");
+      alert("Error al subir el archivo.");
     } finally {
       setSubiendo(false);
     }
@@ -331,29 +329,21 @@ export default function MuroEvento() {
   return (
     <div className="min-h-screen bg-[#f8f9fa] flex flex-col font-sans overflow-hidden relative">
       
-      {/* Inputs de galería ocultos y separados */}
       <input type="file" accept="image/*,video/*" ref={muroInputRef} onChange={(e) => handleFileSelected(e, 'muro')} style={{ display: 'none' }} />
       <input type="file" accept="image/*,video/*" ref={historiaInputRef} onChange={(e) => handleFileSelected(e, 'historia')} style={{ display: 'none' }} />
 
-      {/* --- PANTALLA DE EDICIÓN INMERSIVA A PANTALLA COMPLETA --- */}
+      {/* --- PANTALLA DE EDICIÓN A PANTALLA COMPLETA --- */}
       {archivoEditando !== null && (
         <div className="fixed inset-0 bg-black z-[150] flex flex-col justify-between p-6 animate-fade-in">
           
-          {/* Cabecera minimalista */}
           <div className="flex justify-between items-center text-white z-10">
-            <button 
-              onClick={() => setArchivoEditando(null)}
-              className="text-sm font-medium text-zinc-400 hover:text-white transition"
-            >
-              Cancelar
-            </button>
+            <button onClick={() => setArchivoEditando(null)} className="text-sm font-medium text-zinc-400 hover:text-white transition">Cancelar</button>
             <span className="text-xs font-bold uppercase tracking-widest text-zinc-300">
               {archivoEditando.destino === 'muro' ? 'Nueva Publicación (Muro)' : 'Nueva Historia'}
             </span>
             <div className="w-10"></div>
           </div>
 
-          {/* Medida a Pantalla Completa (Gran protagonista) */}
           <div className="absolute inset-0 flex items-center justify-center bg-black">
             {archivoEditando.tipo === 'video' ? (
               <video 
@@ -365,23 +355,18 @@ export default function MuroEvento() {
                 className="w-full h-full object-contain" 
               />
             ) : (
-              <img 
-                src={archivoEditando.previewUrl} 
-                className="w-full h-full object-contain" 
-                alt="Preview" 
-              />
+              <img src={archivoEditando.previewUrl} className="w-full h-full object-contain" alt="Preview" />
             )}
           </div>
 
-          {/* Controles Flotantes Inferiores (Recorte, Comentario Oculto y Botón Publicar) */}
           <div className="relative z-10 flex flex-col gap-3 pb-6 pointer-events-none">
             
-            {/* Si es video y es largo, barra de recorte elegante abajo */}
+            {/* LÍNEA DE TIEMPO ÚNICA (Único slider con ventana de selección de 10s o 20s) */}
             {archivoEditando.tipo === 'video' && videoDuracion > maxDuracionActual && (
-              <div className="w-full bg-black/60 backdrop-blur-md p-4 rounded-2xl flex flex-col gap-1 pointer-events-auto">
-                <div className="flex justify-between text-[11px] text-zinc-300 font-medium">
-                  <span>Recortar video (Máx {maxDuracionActual}s)</span>
-                  <span>{tiempoInicio.toFixed(1)}s - {(tiempoInicio + maxDuracionActual).toFixed(1)}s</span>
+              <div className="w-full bg-black/70 backdrop-blur-md p-4 rounded-2xl flex flex-col gap-2 pointer-events-auto border border-white/10 shadow-2xl">
+                <div className="flex justify-between text-xs text-zinc-300 font-medium">
+                  <span>Selecciona fragmento ({maxDuracionActual}s)</span>
+                  <span className="text-blue-400 font-bold">{tiempoInicio.toFixed(1)}s al {(tiempoInicio + maxDuracionActual).toFixed(1)}s</span>
                 </div>
                 <input 
                   type="range" 
@@ -389,13 +374,12 @@ export default function MuroEvento() {
                   max={Math.max(0, videoDuracion - maxDuracionActual)} 
                   step="0.1"
                   value={tiempoInicio}
-                  onChange={handleSliderChange}
-                  className="w-full accent-blue-500 cursor-pointer"
+                  onChange={handleTimelineChange}
+                  className="w-full accent-blue-500 cursor-pointer h-2 bg-zinc-700 rounded-lg appearance-none"
                 />
               </div>
             )}
 
-            {/* Caja de Comentario Desplegable (Solo si toca el ícono) */}
             {mostrarCajaComentario && (
               <div className="w-full bg-black/80 backdrop-blur-md p-3 rounded-2xl pointer-events-auto animate-fade-in">
                 <input 
@@ -409,10 +393,7 @@ export default function MuroEvento() {
               </div>
             )}
 
-            {/* Fila inferior: Botón de Comentario Lateral + Botón Publicar Grande */}
             <div className="flex items-center gap-3 pointer-events-auto">
-              
-              {/* Botón Circular Discreto para Comentario */}
               <button 
                 onClick={() => setMostrarCajaComentario(!mostrarCajaComentario)}
                 className={\`w-14 h-14 rounded-2xl backdrop-blur-md border flex items-center justify-center transition \${mostrarCajaComentario ? 'bg-blue-600 border-blue-400 text-white' : 'bg-black/40 border-white/20 text-white hover:bg-black/60'}\`}
@@ -423,7 +404,6 @@ export default function MuroEvento() {
                 </svg>
               </button>
 
-              {/* Botón Principal de Publicar */}
               <button 
                 onClick={publicarArchivo}
                 disabled={subiendo}
@@ -483,7 +463,7 @@ export default function MuroEvento() {
         </div>
       )}
 
-      {/* --- CABECERA Y CARRUSEL DE HISTORIAS (CON SU PROPIO BOTÓN + EXCLUSIVO) --- */}
+      {/* --- CABECERA Y CARRUSEL DE HISTORIAS --- */}
       <header className="bg-white pt-4 pb-5 shadow-sm sticky top-0 z-10 rounded-b-[2rem] flex flex-col">
         <div className="flex items-center justify-between px-6">
           <button onClick={() => router.push('/')} className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-50 text-gray-600">←</button>
@@ -494,10 +474,7 @@ export default function MuroEvento() {
           <button onClick={() => setMenuAbierto(true)} className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-50 text-gray-600 pb-2 text-2xl">⋮</button>
         </div>
 
-        {/* Carrusel con Botón + Exclusivo para Historias al inicio */}
         <div className="flex gap-3 overflow-x-auto mt-6 px-6 pb-2 [&::-webkit-scrollbar]:hidden items-center">
-          
-          {/* BOTÓN + EXCLUSIVO DE HISTORIAS */}
           <button 
             onClick={() => historiaInputRef.current.click()}
             className="flex-shrink-0 w-14 h-20 rounded-[16px] bg-blue-50 border-2 border-dashed border-blue-400 flex flex-col items-center justify-center gap-1 text-blue-600 transition transform hover:scale-95"
@@ -507,7 +484,6 @@ export default function MuroEvento() {
             <span className="text-[8px] font-bold uppercase tracking-wider">Historia</span>
           </button>
 
-          {/* Lista de Historias */}
           {historiasOrdenadas.map((historia, index) => {
             const visto = historiasVistas.includes(historia.id);
             return (
@@ -549,7 +525,7 @@ export default function MuroEvento() {
         )}
       </main>
 
-      {/* BOTÓN "+" PRINCIPAL EXCLUSIVO DEL MURO */}
+      {/* BOTÓN "+" PRINCIPAL DEL MURO */}
       <div className="fixed bottom-10 w-full flex justify-center z-20 pointer-events-none">
         <button 
           onClick={() => muroInputRef.current.click()}
@@ -565,9 +541,9 @@ export default function MuroEvento() {
 
 fs.writeFileSync(path.join(__dirname, 'src/pages/[albumId]/index.js'), muroCode.trim());
 
-console.log("⏳ Subiendo rediseño UX definitivo a la rama principal (main)...");
+console.log("⏳ Subiendo línea de tiempo única de recorte a la rama principal (main)...");
 try {
-  execSync('git add . && git commit -m "UX definitiva: separacion limpia de botones + para muro e historias, pantalla de edicion inmersiva a pantalla completa con comentarios ocultos y recorte inteligente" && git push origin main', { stdio: 'inherit' });
+  execSync('git add . && git commit -m "Implementada linea de tiempo unica con ventana de recorte inteligente de 10s o 20s segun destino" && git push origin main', { stdio: 'inherit' });
   console.log("🚀 ¡Actualización subida con éxito! Vercel está aplicando los cambios.");
 } catch (err) {
   console.error("Error al subir a Git:", err);
