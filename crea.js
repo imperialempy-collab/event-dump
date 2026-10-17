@@ -6,7 +6,7 @@ const muroCode = `
 import { useRouter } from 'next/router';
 import { useState, useEffect, useRef } from 'react';
 import { db, storage } from '../../firebase/config';
-import { doc, getDoc, collection, addDoc, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { doc, getDoc, collection, addDoc, onSnapshot, query, orderBy, updateDoc, increment } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useAuthContext } from '../../context/AuthContext';
 
@@ -38,7 +38,7 @@ export default function MuroEvento() {
   const [isSwipingMuro, setIsSwipingMuro] = useState(false);
   const muroTouchStartRef = useRef({ x: 0, y: 0, ignore: false });
 
-  // --- ESTADO PARA CONTROLAR LAS COLUMNAS DEL MURO (PINCH TO ZOOM) ---
+  // --- ESTADO DE COLUMNAS (2, 3 o 4) ---
   const [columnasMuro, setColumnasMuro] = useState(2);
   const pinchStartDistRef = useRef(null);
 
@@ -61,7 +61,12 @@ export default function MuroEvento() {
     if (!albumId) return;
     const q = query(collection(db, 'albums', albumId, 'fotos'), orderBy('creadoEn', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const data = snapshot.docs.map(doc => ({ 
+        id: doc.id, 
+        likes: doc.data().likes || 0,
+        comentariosCount: doc.data().comentariosCount || 0,
+        ...doc.data() 
+      }));
       setArchivos(data);
     });
     return () => unsubscribe();
@@ -87,7 +92,6 @@ export default function MuroEvento() {
   const closeModal = () => {
     if (window.location.hash === '#viewer') window.history.back();
   };
-  // ----------------------------------------------------
 
   const getTime = (item) => item.creadoEn?.toMillis ? item.creadoEn.toMillis() : (item.creadoEn ? new Date(item.creadoEn).getTime() : 0);
 
@@ -106,7 +110,7 @@ export default function MuroEvento() {
     return aVisto ? 1 : -1;
   });
 
-  // --- LÓGICA DEL GESTO DE PELLIZCO (PINCH ZOOM) ---
+  // --- GESTO DE PELLIZCO PARA ACHICAR (JUNTAR DEDOS) ---
   const handlePinchStart = (e) => {
     if (e.touches.length === 2) {
       const dx = e.touches[0].clientX - e.touches[1].clientX;
@@ -122,13 +126,7 @@ export default function MuroEvento() {
       const currentDist = Math.hypot(dx, dy);
       const diff = currentDist - pinchStartDistRef.current;
       
-      // Umbral de 60px para ejecutar el zoom (evita cambios accidentales)
-      if (diff > 60) {
-        // Separar dedos (Hacer más grande -> menos columnas)
-        setColumnasMuro(prev => Math.max(2, prev - 1));
-        pinchStartDistRef.current = currentDist; 
-      } else if (diff < -60) {
-        // Juntar dedos (Hacer más pequeño -> más columnas)
+      if (diff < -50) {
         setColumnasMuro(prev => Math.min(4, prev + 1));
         pinchStartDistRef.current = currentDist;
       }
@@ -139,6 +137,14 @@ export default function MuroEvento() {
     if (e.touches.length < 2) {
       pinchStartDistRef.current = null;
     }
+  };
+
+  const ciclarColumnas = () => {
+    setColumnasMuro(prev => {
+      if (prev === 2) return 3;
+      if (prev === 3) return 4;
+      return 2;
+    });
   };
 
   const handleFileSelected = (e, destino) => {
@@ -185,6 +191,8 @@ export default function MuroEvento() {
         tipo: archivoEditando.tipo,
         destino: archivoEditando.destino,
         comentario: archivoEditando.comentario.trim(),
+        likes: 0,
+        comentariosCount: archivoEditando.comentario.trim() ? 1 : 0,
         creadoEn: new Date(),
         subidoPor: usuario ? usuario.uid : 'anonimo'
       });
@@ -233,7 +241,16 @@ export default function MuroEvento() {
     });
   };
 
-  // --- VISORES ---
+  const handleLike = async (e, id, currentLikes) => {
+    e.stopPropagation();
+    try {
+      const docRef = doc(db, 'albums', albumId, 'fotos', id);
+      await updateDoc(docRef, { likes: increment(1) });
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   useEffect(() => {
     if (itemActivoIndex !== null) {
       itemsMuro.forEach((item, index) => {
@@ -348,7 +365,6 @@ export default function MuroEvento() {
   if (cargando) return <div className="min-h-screen flex items-center justify-center font-sans">Cargando...</div>;
   if (!album) return null;
 
-  // Clases dinámicas para la grilla basadas en el pellizco
   const gridColsClass = columnasMuro === 2 ? 'grid-cols-2' : columnasMuro === 3 ? 'grid-cols-3' : 'grid-cols-4';
   const gridGapClass = columnasMuro === 2 ? 'gap-4' : columnasMuro === 3 ? 'gap-2' : 'gap-1';
   const mainPadding = columnasMuro === 2 ? 'p-6' : columnasMuro === 3 ? 'p-4' : 'p-2';
@@ -412,7 +428,7 @@ export default function MuroEvento() {
         </div>
       )}
 
-      {/* --- VISORES DE HISTORIA Y MURO OCULTADOS POR BREVEDAD --- */}
+      {/* --- VISORES --- */}
       {visorHistorias !== null && (
         <div className="fixed inset-0 z-[100] flex flex-col" style={{ backgroundColor: \`rgba(0, 0, 0, \${Math.max(0, 1 - Math.abs(swipeOffset) / 400)})\`, transform: \`translateY(\${swipeOffset}px)\`, transition: swipeOffset === 0 ? 'transform 0.25s ease-out, background-color 0.25s ease-out' : 'none', touchAction: 'none' }} onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
           <div className="absolute top-0 w-full p-4 pt-6 flex flex-col gap-3 z-[110] bg-gradient-to-b from-black/80 to-transparent pointer-events-none">
@@ -487,7 +503,7 @@ export default function MuroEvento() {
         </div>
       </header>
 
-      {/* --- MURO CON EVENTOS TÁCTILES PARA EL PELLIZCO --- */}
+      {/* --- MURO CON TARJETAS LIMPIAS --- */}
       <main 
         className={\`flex-1 overflow-y-auto pb-32 transition-all duration-300 \${mainPadding}\`}
         onTouchStart={handlePinchStart}
@@ -499,28 +515,58 @@ export default function MuroEvento() {
         ) : (
           <div className={\`grid \${gridColsClass} \${gridGapClass} auto-rows-fr transition-all duration-300\`}>
             {itemsMuro.map((item, index) => (
-              <button key={item.id} onClick={() => abrirItemMuro(index)} className="flex flex-col relative rounded-2xl overflow-hidden bg-white border border-gray-100 shadow-sm transition-all pb-2 text-left hover:shadow-md hover:-translate-y-0.5">
-                <div className="relative aspect-square w-full overflow-hidden bg-gray-200">
-                  {item.tipo === 'video' ? (
-                    <>
-                      <video src={item.url} autoPlay loop muted playsInline className="w-full h-full object-cover opacity-90" />
-                      <div className="absolute top-2 right-2 bg-black/20 backdrop-blur-sm p-1.5 rounded-full border border-white/20">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5 text-white"><rect x="2" y="6" width="15" height="12" rx="2" ry="2"></rect><polygon points="17 10 22 7 22 17 17 14"></polygon></svg>
-                      </div>
-                    </>
-                  ) : (
-                    <img src={item.url} className="w-full h-full object-cover" loading="lazy" />
-                  )}
-                </div>
-                {/* Ocultamos el comentario si hay 4 columnas para que no se sature la pantalla */}
-                {item.comentario && columnasMuro < 4 && (
-                  <p className="text-[10px] sm:text-xs text-gray-600 px-2 mt-1.5 line-clamp-2 leading-relaxed italic font-sans font-light">"{item.comentario}"</p>
+              <div key={item.id} onClick={() => abrirItemMuro(index)} className="relative aspect-square w-full rounded-2xl overflow-hidden bg-zinc-900 shadow-sm transition-all hover:scale-[0.98] cursor-pointer">
+                
+                {item.tipo === 'video' ? (
+                  <video src={item.url} autoPlay loop muted playsInline className="w-full h-full object-cover" />
+                ) : (
+                  <img src={item.url} className="w-full h-full object-cover" loading="lazy" />
                 )}
-              </button>
+
+                {item.tipo === 'video' && (
+                  <div className="absolute top-2 right-2 bg-black/40 backdrop-blur-md p-1.5 rounded-full border border-white/20">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5 text-white"><rect x="2" y="6" width="15" height="12" rx="2" ry="2"></rect><polygon points="17 10 22 7 22 17 17 14"></polygon></svg>
+                  </div>
+                )}
+
+                <div className="absolute bottom-0 inset-x-0 p-2.5 bg-gradient-to-t from-black/70 via-black/30 to-transparent flex items-center justify-end gap-3 text-white">
+                  
+                  <div className="flex items-center gap-1 bg-black/40 backdrop-blur-md px-2 py-1 rounded-full border border-white/10 text-[11px] font-medium">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                    <span>{item.comentariosCount || 0}</span>
+                  </div>
+
+                  <button 
+                    onClick={(e) => handleLike(e, item.id, item.likes)}
+                    className="flex items-center gap-1 bg-black/40 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/10 text-[11px] font-medium transition active:scale-125"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5 text-red-500"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                    <span>{item.likes || 0}</span>
+                  </button>
+
+                </div>
+
+              </div>
             ))}
           </div>
         )}
       </main>
+
+      {/* BOTÓN FLOTANTE DE ZOOM (Solo aparece cuando columnasMuro > 2) */}
+      {columnasMuro > 2 && (
+        <div className="fixed bottom-28 right-6 z-20 animate-fade-in">
+          <button 
+            onClick={ciclarColumnas}
+            className="w-12 h-12 bg-white/90 backdrop-blur-md text-zinc-800 rounded-full shadow-lg border border-gray-200 flex items-center justify-center text-lg font-bold transition active:scale-90"
+            title="Agrandar vista"
+          >
+            🔍+
+            <span className="absolute -top-1 -right-1 bg-blue-600 text-white text-[9px] w-4 h-4 rounded-full flex items-center justify-center font-bold">
+              {columnasMuro}
+            </span>
+          </button>
+        </div>
+      )}
 
       {/* BOTÓN "+" PRINCIPAL DEL MURO */}
       <div className="fixed bottom-10 w-full flex justify-center z-20 pointer-events-none">
@@ -535,9 +581,9 @@ export default function MuroEvento() {
 
 fs.writeFileSync(path.join(__dirname, 'src/pages/[albumId]/index.js'), muroCode.trim());
 
-console.log("⏳ Subiendo el modo visual de pellizco (Pinch to Zoom) a la rama principal (main)...");
+console.log("⏳ Subiendo cambios a la rama principal (main)...");
 try {
-  execSync('git add . && git commit -m "UX Fix: Implementado gesto de pellizco con dos dedos para aumentar o reducir las columnas del muro entre 2 y 4" && git push origin main', { stdio: 'inherit' });
+  execSync('git add . && git commit -m "UI Pro: Tarjetas limpias, contadores flotantes y boton de zoom condicional" && git push origin main', { stdio: 'inherit' });
   console.log("🚀 ¡Actualización subida con éxito! Vercel está aplicando los cambios.");
 } catch (err) {
   console.error("Error al subir a Git:", err);
