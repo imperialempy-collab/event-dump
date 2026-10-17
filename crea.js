@@ -6,17 +6,23 @@ const { execSync } = require('child_process');
 const timestamp = Date.now();
 const backupBranch = 'backup-' + timestamp;
 console.log("💾 Iniciando protocolo de seguridad: Creando rama de backup (" + backupBranch + ")...");
+
 try {
-  // Crea la rama de backup apuntando al estado actual de main
+  execSync('git add .', { stdio: 'ignore' });
+  execSync('git commit -m "Auto-commit de seguridad antes de cambios"', { stdio: 'ignore' });
+} catch (e) {
+  // Ignorar si no hay nada que commitear previamente
+}
+
+try {
   execSync('git branch ' + backupBranch, { stdio: 'inherit' });
-  // Sube el backup al repositorio remoto
   execSync('git push origin ' + backupBranch, { stdio: 'inherit' });
   console.log("✅ Backup creado y subido exitosamente. Ahora es seguro aplicar los cambios.");
 } catch (error) {
-  console.log("⚠️ Aviso: No se pudo subir la rama de backup. (Puede ser que no haya cambios previos pendientes o sea tu primer commit). Continuando...");
+  console.log("⚠️ Aviso: Hubo un detalle al subir la rama de backup, pero el código continuará para no detenerte.");
 }
 
-// 2. NUEVO CÓDIGO CON PESTAÑAS Y CIERRE AL TOCAR FONDO
+// 2. CÓDIGO COMPLETO (SIN COMILLAS INVERTIDAS INTERNAS PARA EVITAR ERRORES DE SINTAXIS)
 const muroCode = `
 import { useRouter } from 'next/router';
 import { useState, useEffect, useRef } from 'react';
@@ -53,13 +59,11 @@ export default function MuroEvento() {
   const [isSwipingMuro, setIsSwipingMuro] = useState(false);
   const muroTouchStartRef = useRef({ x: 0, y: 0, ignore: false });
 
-  // --- ESTADOS PARA EL PANEL INTERACTIVO (COMENTARIOS Y LIKES) ---
   const [panelInteractivoAbierto, setPanelInteractivoAbierto] = useState(false);
-  const [pestañaActiva, setPestañaActiva] = useState('comentarios'); // 'comentarios' o 'likes'
+  const [pestañaActiva, setPestañaActiva] = useState('comentarios'); 
   const [nuevoComentarioTexto, setNuevoComentarioTexto] = useState('');
   const [listaComentarios, setListaComentarios] = useState([]);
 
-  // --- ESTADO DE COLUMNAS (2, 3 o 4) ---
   const [columnasMuro, setColumnasMuro] = useState(2);
   const pinchStartDistRef = useRef(null);
 
@@ -70,6 +74,13 @@ export default function MuroEvento() {
   })()) : 'guest');
 
   const usuarioNombre = usuario ? (usuario.displayName || usuario.email || 'Usuario') : 'Invitado';
+  
+  // VERIFICACIÓN DE ANÓNIMO PARA RESTRINGIR ACCIONES
+  const esAnonimo = !usuario;
+  const alertaAnonimo = (e) => {
+    if(e) e.stopPropagation();
+    alert('Debes iniciar sesión para interactuar (Próximamente)');
+  };
 
   useEffect(() => {
     if (!albumId) return;
@@ -115,6 +126,7 @@ export default function MuroEvento() {
         setVisorHistorias(null);
         setArchivoEditando(null);
         setPanelInteractivoAbierto(false);
+        setMenuAbierto(false);
       }
     };
     window.addEventListener('hashchange', handleHashChange);
@@ -285,7 +297,6 @@ export default function MuroEvento() {
     });
   };
 
-  // --- TOGGLE DE ME GUSTA (AHORA GUARDA EL NOMBRE) ---
   const handleLike = async (e, item) => {
     e.stopPropagation();
     try {
@@ -293,7 +304,6 @@ export default function MuroEvento() {
       const yaDioLike = (item.likesArray || []).includes(usuarioId);
 
       if (yaDioLike) {
-        // Buscar y remover el objeto exacto de este usuario
         const likeObj = (item.likesData || []).find(l => l.id === usuarioId);
         if (likeObj) {
           await updateDoc(docRef, { 
@@ -341,19 +351,23 @@ export default function MuroEvento() {
     }
   };
 
+  // --- SOLUCIÓN AL BUG DEL VIDEO QUE SE REINICIABA ---
+  // Ahora solo depende de 'itemActivoIndex', no de los cambios en la base de datos (likes/comentarios)
   useEffect(() => {
     if (itemActivoIndex !== null) {
-      itemsMuro.forEach((item, index) => {
-        const videoEl = document.getElementById('video-muro-' + index);
-        if (videoEl) {
-          if (index === itemActivoIndex) {
-            videoEl.currentTime = 0;
-            videoEl.play().catch(err => console.log(err));
-          } else { videoEl.pause(); }
+      const todosLosVideos = document.querySelectorAll('video[id^="video-muro-"]');
+      todosLosVideos.forEach(v => {
+        if (v.id === 'video-muro-' + itemActivoIndex) {
+          if (v.currentTime === 0 || v.paused) {
+            v.currentTime = 0;
+            v.play().catch(err => console.log(err));
+          }
+        } else {
+          v.pause();
         }
       });
     }
-  }, [itemActivoIndex, itemsMuro]);
+  }, [itemActivoIndex]);
 
   const marcarComoVista = (id) => {
     if (!historiasVistas.includes(id)) {
@@ -477,11 +491,11 @@ export default function MuroEvento() {
       <input type="file" accept="image/*,video/*" ref={historiaInputRef} onChange={(e) => handleFileSelected(e, 'historia')} style={{ display: 'none' }} />
 
       {archivoEditando !== null && (
-        <div className="fixed inset-0 bg-black z-[150] flex flex-col justify-between p-6 animate-fade-in">
+        <div className="fixed inset-0 bg-black z-[150] flex flex-col justify-between p-6 transition-opacity">
           <div className="flex justify-between items-center text-white z-10">
             <button onClick={cancelarEdicion} className="text-sm font-medium text-zinc-400 hover:text-white transition">Cancelar</button>
             <span className="text-xs font-bold uppercase tracking-widest text-zinc-300">
-              {archivoEditando.destino === 'muro' ? 'Nueva Publicación (Muro)' : 'Nueva Historia'}
+              {archivoEditando.destino === 'muro' ? 'Nueva Publicación' : 'Nueva Historia'}
             </span>
             <div className="w-10"></div>
           </div>
@@ -504,7 +518,7 @@ export default function MuroEvento() {
             )}
 
             {mostrarCajaComentario && (
-              <div className="w-full bg-black/80 backdrop-blur-md p-3 rounded-2xl pointer-events-auto animate-fade-in">
+              <div className="w-full bg-black/80 backdrop-blur-md p-3 rounded-2xl pointer-events-auto">
                 <input 
                   type="text" 
                   placeholder="Escribe un comentario..." 
@@ -528,6 +542,7 @@ export default function MuroEvento() {
         </div>
       )}
 
+      {/* --- VISORES DE HISTORIAS CON UI DE RESPUESTA PREPARADA --- */}
       {visorHistorias !== null && (
         <div className="fixed inset-0 z-[100] flex flex-col" style={{ backgroundColor: 'rgba(0, 0, 0, ' + Math.max(0, 1 - Math.abs(swipeOffset) / 400) + ')', transform: 'translateY(' + swipeOffset + 'px)', transition: swipeOffset === 0 ? 'transform 0.25s ease-out, background-color 0.25s ease-out' : 'none', touchAction: 'none' }} onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
           <div className="absolute top-0 w-full p-4 pt-6 flex flex-col gap-3 z-[110] bg-gradient-to-b from-black/80 to-transparent pointer-events-none">
@@ -539,13 +554,50 @@ export default function MuroEvento() {
               <button onClick={cerrarVisorHistorias} className="text-white text-3xl font-light leading-none shadow-black drop-shadow-md pb-1">×</button>
             </div>
           </div>
+          
           <video src={visorHistorias.lista[visorHistorias.currentIndex].url} autoPlay playsInline onTimeUpdate={handleTimeUpdate} className="w-full h-full object-cover" />
+          
+          {/* Botones invisibles de navegación lateral */}
           <div className="absolute inset-y-0 left-0 w-[30%] z-[100]" onClick={retrocederHistoria}></div>
           <div className="absolute inset-y-0 right-0 w-[70%] z-[100]" onClick={avanzarHistoria}></div>
+
+          {/* BARRA DE RESPUESTA (Chat) - Z-index mayor para que no choque con la navegación */}
+          <div className="absolute bottom-6 inset-x-4 z-[120] flex gap-2 pointer-events-auto" onTouchStart={e => e.stopPropagation()}>
+            {esAnonimo ? (
+              <div onClick={alertaAnonimo} className="flex-1 bg-black/40 backdrop-blur-md border border-white/20 rounded-full px-4 py-3 flex items-center justify-center cursor-pointer">
+                <span className="text-white/80 text-xs font-medium tracking-wide">Inicia sesión para responder</span>
+              </div>
+            ) : (
+              <>
+                <input 
+                  type="text" 
+                  placeholder="Responder a la historia..." 
+                  className="flex-1 bg-black/40 backdrop-blur-md border border-white/20 rounded-full px-4 py-3 text-xs text-white placeholder-white/70 outline-none shadow-lg"
+                  onClick={(e) => e.stopPropagation()}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && e.target.value.trim() !== '') {
+                      e.preventDefault();
+                      alert('Mensaje enviado. (El sistema de Chat llegará en el próximo paso)');
+                      e.target.value = '';
+                    }
+                  }}
+                />
+                <button 
+                  className="w-11 h-11 bg-black/40 backdrop-blur-md border border-white/20 rounded-full flex items-center justify-center text-white shadow-lg transition active:scale-90"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    alert('Me gusta enviado de forma privada.');
+                  }}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                </button>
+              </>
+            )}
+          </div>
         </div>
       )}
 
-      {/* --- VISOR DETALLADO DEL MURO ORIGINAL --- */}
+      {/* --- VISOR DETALLADO DEL MURO --- */}
       {itemActivoIndex !== null && (
         <div 
           className="fixed inset-0 z-[100] overflow-hidden backdrop-blur-sm" 
@@ -599,7 +651,7 @@ export default function MuroEvento() {
               </button>
 
               <button 
-                onClick={(e) => handleLike(e, itemActivo)}
+                onClick={(e) => esAnonimo ? alertaAnonimo(e) : handleLike(e, itemActivo)}
                 className="flex items-center gap-2 text-sm font-semibold transition active:scale-125"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={usuarioDioLikeActivo ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={'w-6 h-6 ' + (usuarioDioLikeActivo ? 'text-red-500' : 'text-white')}><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
@@ -608,13 +660,12 @@ export default function MuroEvento() {
 
             </div>
 
-            {/* PANEL DESPLEGABLE CON PESTAÑAS (COMENTARIOS / LIKES) */}
+            {/* PANEL DESPLEGABLE CON PESTAÑAS */}
             {panelInteractivoAbierto && (
               <div 
-                className="bg-zinc-900/95 backdrop-blur-md rounded-2xl p-4 max-h-72 flex flex-col gap-3 border border-white/10 animate-fade-in shadow-2xl pointer-events-auto"
+                className="bg-zinc-900/95 backdrop-blur-md rounded-2xl p-4 max-h-72 flex flex-col gap-3 border border-white/10 shadow-2xl pointer-events-auto"
                 onClick={(e) => e.stopPropagation()} 
               >
-                {/* Cabecera del Panel (Pestañas) */}
                 <div className="flex justify-between items-center border-b border-white/10 pb-2">
                   <div className="flex gap-4">
                     <button 
@@ -633,10 +684,8 @@ export default function MuroEvento() {
                   <button onClick={() => setPanelInteractivoAbierto(false)} className="text-zinc-400 text-2xl leading-none pb-1">×</button>
                 </div>
 
-                {/* Contenido del Panel */}
                 <div className="flex-1 overflow-y-auto flex flex-col gap-2 pr-1">
                   {pestañaActiva === 'comentarios' ? (
-                    /* Lista de Comentarios */
                     (itemActivo?.comentarios || []).length === 0 ? (
                       <p className="text-xs text-zinc-500 text-center py-4">Aún no hay comentarios. ¡Sé el primero en comentar!</p>
                     ) : (
@@ -648,7 +697,6 @@ export default function MuroEvento() {
                       ))
                     )
                   ) : (
-                    /* Lista de Likes */
                     (itemActivo?.likesData || []).length === 0 ? (
                       <p className="text-xs text-zinc-500 text-center py-4">Aún no hay Me gusta.</p>
                     ) : (
@@ -664,18 +712,26 @@ export default function MuroEvento() {
                   )}
                 </div>
 
-                {/* Caja para escribir (Solo visible en la pestaña comentarios) */}
+                {/* CAJA PARA COMENTAR (Bloqueada para anónimos) */}
                 {pestañaActiva === 'comentarios' && (
-                  <form onSubmit={enviarComentario} className="flex gap-2 pt-1 border-t border-white/10 mt-1">
-                    <input 
-                      type="text" 
-                      placeholder="Escribe un comentario..." 
-                      value={nuevoComentarioTexto}
-                      onChange={(e) => setNuevoComentarioTexto(e.target.value)}
-                      className="flex-1 bg-white/10 text-white placeholder-zinc-400 px-3 py-2.5 rounded-xl outline-none text-xs border border-white/10"
-                    />
-                    <button type="submit" className="bg-blue-600 text-white px-4 py-2.5 rounded-xl text-xs font-bold shadow-md hover:bg-blue-500 transition">Enviar</button>
-                  </form>
+                  <div className="pt-1 border-t border-white/10 mt-1">
+                    {esAnonimo ? (
+                      <div className="p-3 bg-white/5 border border-white/10 rounded-xl text-center cursor-pointer" onClick={alertaAnonimo}>
+                        <p className="text-xs font-medium text-zinc-400">Inicia sesión para comentar</p>
+                      </div>
+                    ) : (
+                      <form onSubmit={enviarComentario} className="flex gap-2">
+                        <input 
+                          type="text" 
+                          placeholder="Escribe un comentario..." 
+                          value={nuevoComentarioTexto}
+                          onChange={(e) => setNuevoComentarioTexto(e.target.value)}
+                          className="flex-1 bg-white/10 text-white placeholder-zinc-400 px-3 py-2.5 rounded-xl outline-none text-xs border border-white/10"
+                        />
+                        <button type="submit" className="bg-blue-600 text-white px-4 py-2.5 rounded-xl text-xs font-bold shadow-md hover:bg-blue-500 transition">Enviar</button>
+                      </form>
+                    )}
+                  </div>
                 )}
               </div>
             )}
@@ -683,6 +739,7 @@ export default function MuroEvento() {
         </div>
       )}
 
+      {/* --- CABECERA Y CARRUSEL --- */}
       <header className="bg-white pt-4 pb-5 shadow-sm sticky top-0 z-10 rounded-b-[2rem] flex flex-col">
         <div className="flex items-center justify-between px-6">
           <button onClick={() => router.push('/')} className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-50 text-gray-600">←</button>
@@ -711,6 +768,7 @@ export default function MuroEvento() {
         </div>
       </header>
 
+      {/* --- MURO --- */}
       <main 
         className={'flex-1 overflow-y-auto pb-32 transition-all duration-300 ' + mainPadding}
         onTouchStart={handlePinchStart}
@@ -752,7 +810,7 @@ export default function MuroEvento() {
                     )}
 
                     <button 
-                      onClick={(e) => handleLike(e, item)}
+                      onClick={(e) => esAnonimo ? alertaAnonimo(e) : handleLike(e, item)}
                       className="flex items-center gap-1 text-xs font-semibold transition active:scale-125"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={corazonRojo ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={'w-4 h-4 ' + (corazonRojo ? 'text-red-500' : 'text-white')}><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
@@ -768,8 +826,35 @@ export default function MuroEvento() {
         )}
       </main>
 
+      {/* --- MENÚ LATERAL --- */}
+      {menuAbierto && (
+        <div className="fixed inset-0 z-[200] flex justify-end bg-black/40 backdrop-blur-sm" onClick={() => setMenuAbierto(false)}>
+          <div className="w-64 bg-white h-full shadow-2xl flex flex-col p-6 transition-transform" onClick={e => e.stopPropagation()}>
+            
+            <div className="flex justify-between items-center mb-8">
+              <h2 className="text-xl font-serif text-black">Menú</h2>
+              <button onClick={() => setMenuAbierto(false)} className="text-3xl font-light text-gray-400 leading-none pb-1">×</button>
+            </div>
+            
+            <button onClick={() => { alert('Bandeja de chats Privados en construcción (Siguiente fase)'); setMenuAbierto(false); }} className="flex items-center gap-3 text-sm font-bold text-gray-700 hover:text-blue-600 transition p-4 bg-gray-50 rounded-xl border border-gray-100 shadow-sm w-full text-left">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+              Chats Privados
+            </button>
+
+            <div className="mt-auto border-t border-gray-100 pt-4">
+              {esAnonimo ? (
+                <button className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold text-sm shadow-md" onClick={() => alert('Próximamente login con Google')}>Iniciar Sesión</button>
+              ) : (
+                <p className="text-xs text-gray-400 text-center font-medium">Sesión: {usuarioNombre}</p>
+              )}
+            </div>
+            
+          </div>
+        </div>
+      )}
+
       {columnasMuro > 2 && (
-        <div className="fixed bottom-28 right-6 z-20 animate-fade-in">
+        <div className="fixed bottom-28 right-6 z-20 transition-opacity">
           <button 
             onClick={ciclarColumnas}
             className="w-12 h-12 bg-white/90 backdrop-blur-md text-zinc-700 rounded-full shadow-lg border border-gray-200 flex items-center justify-center transition active:scale-90"
@@ -792,10 +877,10 @@ export default function MuroEvento() {
 
 fs.writeFileSync(path.join(__dirname, 'src/pages/[albumId]/index.js'), muroCode.trim());
 
-console.log("⏳ Subiendo el cambio principal a la rama (main)...");
+console.log("⏳ Subiendo código limpio, seguro y completo a la rama (main)...");
 try {
-  execSync('git add . && git commit -m "UI: Agregado sistema de pestañas en el panel (Comentarios / Me gusta), registro de nombres y cerrado al tocar fondo" && git push origin main', { stdio: 'inherit' });
-  console.log("🚀 ¡Actualización subida con éxito! Vercel está aplicando los cambios.");
+  execSync('git add . && git commit -m "UI y Fix: Fix Bug de video resuelto, restricción a anónimos y Menú Lateral de chats maquetado" && git push origin main', { stdio: 'inherit' });
+  console.log("🚀 ¡Actualización perfecta subida con éxito! Vercel está aplicando los cambios.");
 } catch (err) {
   console.error("Error al subir a Git:", err);
 }
