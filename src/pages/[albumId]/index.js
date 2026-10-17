@@ -16,19 +16,12 @@ export default function MuroEvento() {
   const [archivos, setArchivos] = useState([]);
   const [subiendo, setSubiendo] = useState(false);
 
+  // Inputs separados para Muro e Historia
   const muroInputRef = useRef(null);
   const historiaInputRef = useRef(null);
 
   const [archivoEditando, setArchivoEditando] = useState(null); 
   const [mostrarCajaComentario, setMostrarCajaComentario] = useState(false);
-
-  const videoPreviewRef = useRef(null);
-  const [videoDuracion, setVideoDuracion] = useState(0);
-  const [tiempoInicio, setTiempoInicio] = useState(0);
-
-  // Referencias para el arrastre táctil del bloque de recorte
-  const trackRef = useRef(null);
-  const isDraggingRef = useRef(false);
 
   // Estados de visores
   const [historiasVistas, setHistoriasVistas] = useState([]);
@@ -95,50 +88,10 @@ export default function MuroEvento() {
       previewUrl: URL.createObjectURL(file),
       tipo,
       destino,
-      comentario: '',
-      trimStart: 0
+      comentario: ''
     });
     setMostrarCajaComentario(false);
-    setTiempoInicio(0);
     e.target.value = null;
-  };
-
-  const handleVideoLoadedMetadata = (e) => {
-    setVideoDuracion(e.target.duration);
-    setTiempoInicio(0);
-  };
-
-  // --- LÓGICA TÁCTIL DEL BLOQUE DESLIZANTE ---
-  const handleTouchOrMouseStart = (e) => {
-    isDraggingRef.current = true;
-    actualizarPosicionDesdeEvento(e);
-  };
-
-  const handleTouchOrMouseMove = (e) => {
-    if (!isDraggingRef.current) return;
-    actualizarPosicionDesdeEvento(e);
-  };
-
-  const handleTouchOrMouseEnd = () => {
-    isDraggingRef.current = false;
-  };
-
-  const actualizarPosicionDesdeEvento = (e) => {
-    if (!trackRef.current || videoDuracion <= 0) return;
-    const rect = trackRef.current.getBoundingClientRect();
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const offsetX = clientX - rect.left;
-    const porcentaje = Math.max(0, Math.min(1, offsetX / rect.width));
-
-    const maxDuracionPermitida = archivoEditando?.destino === 'historia' ? 10 : 20;
-    const maxInicio = Math.max(0, videoDuracion - maxDuracionPermitida);
-    const nuevoInicio = porcentaje * maxInicio;
-
-    setTiempoInicio(nuevoInicio);
-    setArchivoEditando(prev => ({ ...prev, trimStart: nuevoInicio }));
-    if (videoPreviewRef.current) {
-      videoPreviewRef.current.currentTime = nuevoInicio;
-    }
   };
 
   const publicarArchivo = async () => {
@@ -146,13 +99,11 @@ export default function MuroEvento() {
     setSubiendo(true);
     try {
       let archivoFinal = archivoEditando.file;
-      const maxDuracion = archivoEditando.destino === 'historia' ? 10 : 20;
 
       if (archivoEditando.tipo === 'imagen') {
         archivoFinal = await comprimirImagen(archivoEditando.file);
-      } else if (archivoEditando.tipo === 'video') {
-        archivoFinal = await recortarVideoEnCliente(archivoEditando.file, archivoEditando.trimStart || 0, maxDuracion);
       }
+      // Los videos se suben directamente sin recortes lentos
 
       const extension = archivoFinal.name.split('.').pop() || (archivoEditando.tipo === 'video' ? 'mp4' : 'jpg');
       const nombreArchivo = `${Date.now()}-${Math.random().toString(36).substring(2)}.${extension}`;
@@ -213,64 +164,6 @@ export default function MuroEvento() {
     });
   };
 
-  const recortarVideoEnCliente = (file, startTime, maxDuration) => {
-    return new Promise((resolve) => {
-      const video = document.createElement('video');
-      video.src = URL.createObjectURL(file);
-      video.muted = true;
-      video.playsInline = true;
-
-      video.onloadedmetadata = () => {
-        const duracionEfectiva = Math.min(video.duration, maxDuration);
-        const durationToRecord = Math.min(duracionEfectiva, video.duration - startTime);
-        video.currentTime = startTime;
-
-        video.onseeked = () => {
-          const canvas = document.createElement('canvas');
-          canvas.width = video.videoWidth || 720;
-          canvas.height = video.videoHeight || 1280;
-          const ctx = canvas.getContext('2d');
-
-          const stream = canvas.captureStream(30);
-          let recorderOptions = { mimeType: 'video/webm;codecs=vp9' };
-          if (!MediaRecorder.isTypeSupported(recorderOptions.mimeType)) {
-            recorderOptions = { mimeType: 'video/mp4' };
-            if (!MediaRecorder.isTypeSupported(recorderOptions.mimeType)) recorderOptions = {};
-          }
-
-          let mediaRecorder;
-          try {
-            mediaRecorder = new MediaRecorder(stream, recorderOptions);
-          } catch(e) {
-            resolve(file);
-            return;
-          }
-
-          const chunks = [];
-          mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
-          mediaRecorder.onstop = () => {
-            const blob = new Blob(chunks, { type: recorderOptions.mimeType || 'video/mp4' });
-            resolve(new File([blob], file.name, { type: blob.type, lastModified: Date.now() }));
-          };
-
-          mediaRecorder.start();
-          video.play();
-
-          const startTimeReal = Date.now();
-          const interval = setInterval(() => {
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            const elapsed = (Date.now() - startTimeReal) / 1000;
-            if (elapsed >= durationToRecord || video.ended || video.currentTime >= startTime + durationToRecord) {
-              clearInterval(interval);
-              video.pause();
-              mediaRecorder.stop();
-            }
-          }, 33);
-        };
-      };
-    });
-  };
-
   // --- VISORES ---
   useEffect(() => {
     if (itemActivoIndex !== null) {
@@ -294,10 +187,21 @@ export default function MuroEvento() {
     }
   };
   const abrirHistoria = (index) => { setVisorHistorias({ lista: historiasOrdenadas, currentIndex: index }); setVideoProgreso(0); setSwipeOffset(0); marcarComoVista(historiasOrdenadas[index].id); };
+  
+  // Limitar visualmente las historias a 10s
+  const manejarTiempoHistoria = (e) => {
+      if (e.target.currentTime >= 10) {
+          avanzarHistoria();
+      }
+  }
+
   const avanzarHistoria = (e) => { if (e) e.stopPropagation(); if (visorHistorias.currentIndex < visorHistorias.lista.length - 1) { setVisorHistorias({ ...visorHistorias, currentIndex: visorHistorias.currentIndex + 1 }); setVideoProgreso(0); marcarComoVista(visorHistorias.lista[visorHistorias.currentIndex + 1].id); } else cerrarVisorHistorias(); };
   const retrocederHistoria = (e) => { if (e) e.stopPropagation(); if (visorHistorias.currentIndex > 0) { setVisorHistorias({ ...visorHistorias, currentIndex: visorHistorias.currentIndex - 1 }); setVideoProgreso(0); marcarComoVista(visorHistorias.lista[visorHistorias.currentIndex - 1].id); } };
   const cerrarVisorHistorias = () => { setVisorHistorias(null); setVideoProgreso(0); setSwipeOffset(0); };
-  const handleTimeUpdate = (e) => { if (e.target.duration > 0) setVideoProgreso((e.target.currentTime / e.target.duration) * 100); };
+  const handleTimeUpdate = (e) => { 
+      if (e.target.duration > 0) setVideoProgreso((e.target.currentTime / Math.min(e.target.duration, 10)) * 100); 
+      manejarTiempoHistoria(e);
+  };
   const handleTouchStart = (e) => { touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }; setSwipeOffset(0); };
   const handleTouchMove = (e) => { const diffY = e.touches[0].clientY - touchStartRef.current.y; const diffX = e.touches[0].clientX - touchStartRef.current.x; if (Math.abs(diffY) > Math.abs(diffX) && Math.abs(diffY) > 10) setSwipeOffset(diffY); };
   const handleTouchEnd = (e) => { const diffY = e.changedTouches[0].clientY - touchStartRef.current.y; const diffX = e.changedTouches[0].clientX - touchStartRef.current.x; if (Math.abs(diffY) > Math.abs(diffX) && Math.abs(diffY) > 80) cerrarVisorHistorias(); else setSwipeOffset(0); };
@@ -342,15 +246,16 @@ export default function MuroEvento() {
     else setMuroSwipeOffset({ x: 0, y: 0 }); 
   };
 
+  // Limitar visualmente los videos del muro a 20s
+  const manejarTiempoMuro = (e) => {
+      if (e.target.currentTime >= 20) {
+          e.target.currentTime = 0;
+          e.target.play();
+      }
+  }
+
   if (cargando) return <div className="min-h-screen flex items-center justify-center font-sans">Cargando...</div>;
   if (!album) return null;
-
-  const maxDuracionPermitida = archivoEditando?.destino === 'historia' ? 10 : 20;
-  const necesitaRecorte = videoDuracion > maxDuracionPermitida;
-
-  // Cálculo porcentual para posicionar el bloque azul deslizante sobre la pista
-  const maxInicio = Math.max(0.1, videoDuracion - maxDuracionPermitida);
-  const porcentajeLeft = videoDuracion > 0 ? (tiempoInicio / maxInicio) * 80 : 0; // 80% para dejar espacio al ancho del bloque
 
   return (
     <div className="min-h-screen bg-[#f8f9fa] flex flex-col font-sans overflow-hidden relative">
@@ -358,7 +263,7 @@ export default function MuroEvento() {
       <input type="file" accept="image/*,video/*" ref={muroInputRef} onChange={(e) => handleFileSelected(e, 'muro')} style={{ display: 'none' }} />
       <input type="file" accept="image/*,video/*" ref={historiaInputRef} onChange={(e) => handleFileSelected(e, 'historia')} style={{ display: 'none' }} />
 
-      {/* --- PANTALLA DE EDICIÓN A PANTALLA COMPLETA --- */}
+      {/* --- PANTALLA DE EDICIÓN (LIMPIA Y RÁPIDA) --- */}
       {archivoEditando !== null && (
         <div className="fixed inset-0 bg-black z-[150] flex flex-col justify-between p-6 animate-fade-in">
           
@@ -373,9 +278,7 @@ export default function MuroEvento() {
           <div className="absolute inset-0 flex items-center justify-center bg-black">
             {archivoEditando.tipo === 'video' ? (
               <video 
-                ref={videoPreviewRef}
                 src={archivoEditando.previewUrl} 
-                onLoadedMetadata={handleVideoLoadedMetadata}
                 autoPlay
                 loop
                 muted
@@ -389,31 +292,13 @@ export default function MuroEvento() {
 
           <div className="relative z-10 flex flex-col gap-3 pb-6 pointer-events-none">
             
-            {/* BLOQUE TÁCTIL DESLIZANTE REAL (Franja fija que se arrastra con el dedo) */}
-            {archivoEditando.tipo === 'video' && necesitaRecorte && (
-              <div className="w-full bg-black/80 backdrop-blur-md p-4 rounded-2xl flex flex-col gap-2 pointer-events-auto border border-white/20 shadow-2xl">
-                <span className="text-[11px] text-zinc-400 font-medium text-center">Arrastra el bloque para seleccionar los {maxDuracionPermitida}s</span>
-                
-                {/* Pista total */}
-                <div 
-                  ref={trackRef}
-                  onMouseDown={handleTouchOrMouseStart}
-                  onMouseMove={handleTouchOrMouseMove}
-                  onMouseUp={handleTouchOrMouseEnd}
-                  onTouchStart={handleTouchOrMouseStart}
-                  onTouchMove={handleTouchOrMouseMove}
-                  onTouchEnd={handleTouchOrMouseEnd}
-                  className="relative w-full h-12 bg-zinc-900 rounded-xl overflow-hidden cursor-pointer border border-zinc-700 flex items-center"
-                >
-                  {/* Bloque deslizante azul */}
-                  <div 
-                    className="absolute h-full bg-blue-600/80 border-2 border-blue-400 rounded-lg shadow-lg flex items-center justify-center transition-all duration-75"
-                    style={{ width: '20%', left: `${porcentajeLeft}%` }}
-                  >
-                    <div className="w-1.5 h-6 bg-white/80 rounded-full"></div>
-                  </div>
+            {/* Aviso simple */}
+             {archivoEditando.tipo === 'video' && (
+                <div className="w-full text-center">
+                   <span className="text-xs text-white/80 bg-black/40 px-3 py-1 rounded-full backdrop-blur-sm">
+                       Se mostrarán los primeros {archivoEditando.destino === 'historia' ? '10' : '20'} segundos
+                   </span>
                 </div>
-              </div>
             )}
 
             {/* Caja de comentario desplegable */}
@@ -446,7 +331,7 @@ export default function MuroEvento() {
                 disabled={subiendo}
                 className="flex-1 py-4 bg-blue-600 text-white font-bold rounded-2xl text-base shadow-[0_10px_25px_rgba(37,99,235,0.4)] hover:bg-blue-500 transition flex items-center justify-center gap-2"
               >
-                {subiendo ? <span>⏳ Publicando...</span> : <span>Publicar</span>}
+                {subiendo ? <span>⏳ Subiendo rápido...</span> : <span>Publicar</span>}
               </button>
             </div>
 
@@ -466,7 +351,7 @@ export default function MuroEvento() {
               <button onClick={cerrarVisorHistorias} className="text-white text-3xl font-light leading-none shadow-black drop-shadow-md pb-1">×</button>
             </div>
           </div>
-          <video src={visorHistorias.lista[visorHistorias.currentIndex].url} autoPlay playsInline onEnded={avanzarHistoria} onTimeUpdate={handleTimeUpdate} className="w-full h-full object-cover" />
+          <video src={visorHistorias.lista[visorHistorias.currentIndex].url} autoPlay playsInline onTimeUpdate={handleTimeUpdate} className="w-full h-full object-cover" />
           <div className="absolute inset-y-0 left-0 w-[30%] z-[100]" onClick={retrocederHistoria}></div>
           <div className="absolute inset-y-0 right-0 w-[70%] z-[100]" onClick={avanzarHistoria}></div>
         </div>
@@ -484,7 +369,7 @@ export default function MuroEvento() {
               return (
                 <div key={item.id} className="absolute inset-0 w-full h-full flex items-center justify-center" style={{ transform: `translateX(calc(${(index - itemActivoIndex) * 100}% + ${muroSwipeOffset.x}px))`, transition: isSwipingMuro ? 'none' : 'transform 0.35s cubic-bezier(0.25, 0.8, 0.25, 1)' }}>
                   {item.tipo === 'video' ? (
-                    <video id={`video-muro-${index}`} src={item.url} playsInline controls={index === itemActivoIndex} className={`max-w-full max-h-full object-contain ${index === itemActivoIndex ? 'pointer-events-auto z-50' : 'pointer-events-none'}`} />
+                    <video id={`video-muro-${index}`} src={item.url} playsInline controls={index === itemActivoIndex} onTimeUpdate={manejarTiempoMuro} className={`max-w-full max-h-full object-contain ${index === itemActivoIndex ? 'pointer-events-auto z-50' : 'pointer-events-none'}`} />
                   ) : (
                     <img src={item.url} className="max-w-full max-h-full object-contain pointer-events-none" alt="Visor" />
                   )}
