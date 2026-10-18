@@ -448,6 +448,22 @@ export default function MuroEvento() {
       }
   };
 
+  // --- FUNCIÓN PARA COMPARTIR EL ÁLBUM ---
+  const compartirAlbum = () => {
+    const urlActual = window.location.href;
+    if (navigator.share) {
+      navigator.share({
+        title: album?.nombreEvento || 'Álbum del Evento',
+        text: '¡Únete a nuestro álbum para ver y subir fotos y videos!',
+        url: urlActual,
+      }).catch(() => {});
+    } else {
+      navigator.clipboard.writeText(urlActual);
+      alert('¡Enlace del álbum copiado al portapapeles!');
+    }
+    setMenuAbierto(false);
+  };
+
   if (cargando) return <div className="min-h-screen flex items-center justify-center font-sans">Cargando...</div>;
   if (!album) return null;
 
@@ -801,10 +817,17 @@ export default function MuroEvento() {
               <button onClick={() => setMenuAbierto(false)} className="text-3xl font-light text-gray-400 leading-none pb-1">×</button>
             </div>
             
-            <button onClick={() => { alert('Bandeja de chats Privados en construcción'); setMenuAbierto(false); }} className="flex items-center gap-3 text-sm font-bold text-gray-700 hover:text-blue-600 transition p-4 bg-gray-50 rounded-xl border border-gray-100 shadow-sm w-full text-left">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
-              Chats Privados
-            </button>
+            <div className="flex flex-col gap-3">
+              <button onClick={compartirAlbum} className="flex items-center gap-3 text-sm font-bold text-gray-700 hover:text-blue-600 transition p-4 bg-gray-50 rounded-xl border border-gray-100 shadow-sm w-full text-left">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
+                Compartir Álbum
+              </button>
+
+              <button onClick={() => { alert('Bandeja de chats Privados en construcción'); setMenuAbierto(false); }} className="flex items-center gap-3 text-sm font-bold text-gray-700 hover:text-blue-600 transition p-4 bg-gray-50 rounded-xl border border-gray-100 shadow-sm w-full text-left">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                Chats Privados
+              </button>
+            </div>
 
             <div className="mt-auto border-t border-gray-100 pt-4">
               {esAnonimo ? (
