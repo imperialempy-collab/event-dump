@@ -1,29 +1,3 @@
-const fs = require('fs');
-const path = require('path');
-const { execSync } = require('child_process');
-
-// 1. REGLA DE ORO: CREAR BACKUP ANTES DE APLICAR EL CAMBIO
-const timestamp = Date.now();
-const backupBranch = 'backup-' + timestamp;
-console.log("💾 Iniciando protocolo de seguridad: Creando rama de backup (" + backupBranch + ")...");
-
-try {
-  execSync('git add .', { stdio: 'ignore' });
-  execSync('git commit -m "Auto-commit de seguridad antes de restaurar efecto suave"', { stdio: 'ignore' });
-} catch (e) {
-  // Ignorar si no hay cambios previos pendientes
-}
-
-try {
-  execSync('git branch ' + backupBranch, { stdio: 'inherit' });
-  execSync('git push origin ' + backupBranch, { stdio: 'inherit' });
-  console.log("✅ Backup creado y subido exitosamente.");
-} catch (error) {
-  console.log("⚠️ Aviso: Continuando con la ejecución...");
-}
-
-// 2. CÓDIGO COMPLETO CON EL EFECTO SUAVE RESTAURADO EN EL VISOR DEL MURO
-const muroCode = `
 import { useRouter } from 'next/router';
 import { useState, useEffect, useRef } from 'react';
 import { db, storage } from '../../firebase/config';
@@ -175,6 +149,9 @@ export default function MuroEvento() {
       if (diff < -50) {
         setColumnasMuro(prev => Math.min(4, prev + 1));
         pinchStartDistRef.current = currentDist;
+      } else if (diff > 50) {
+        setColumnasMuro(prev => Math.max(2, prev - 1));
+        pinchStartDistRef.current = currentDist;
       }
     }
   };
@@ -226,8 +203,8 @@ export default function MuroEvento() {
       }
 
       const extension = archivoFinal.name.split('.').pop() || (archivoEditando.tipo === 'video' ? 'mp4' : 'jpg');
-      const nombreArchivo = Date.now() + '-' + Math.random().toString(36).substring(2) + '.' + extension;
-      const ruta = storageRef(storage, 'eventos/' + albumId + '/' + nombreArchivo);
+      const nombreArchivo = `${Date.now()}-${Math.random().toString(36).substring(2)}.${extension}`;
+      const ruta = storageRef(storage, `eventos/${albumId}/${nombreArchivo}`);
 
       await uploadBytes(ruta, archivoFinal);
       const urlDescarga = await getDownloadURL(ruta);
@@ -354,7 +331,7 @@ export default function MuroEvento() {
     if (itemActivoIndex !== null) {
       const todosLosVideos = document.querySelectorAll('video[id^="video-muro-"]');
       todosLosVideos.forEach(v => {
-        if (v.id === 'video-muro-' + itemActivoIndex) {
+        if (v.id === `video-muro-${itemActivoIndex}`) {
           if (v.currentTime === 0 || v.paused) {
             v.currentTime = 0;
             v.play().catch(err => console.log(err));
@@ -528,7 +505,7 @@ export default function MuroEvento() {
             )}
 
             <div className="flex items-center gap-3 pointer-events-auto">
-              <button onClick={() => setMostrarCajaComentario(!mostrarCajaComentario)} className={'w-14 h-14 rounded-2xl backdrop-blur-md border flex items-center justify-center transition ' + (mostrarCajaComentario ? 'bg-blue-600 border-blue-400 text-white' : 'bg-black/40 border-white/20 text-white hover:bg-black/60')} title="Añadir comentario">
+              <button onClick={() => setMostrarCajaComentario(!mostrarCajaComentario)} className={`w-14 h-14 rounded-2xl backdrop-blur-md border flex items-center justify-center transition ${mostrarCajaComentario ? 'bg-blue-600 border-blue-400 text-white' : 'bg-black/40 border-white/20 text-white hover:bg-black/60'}`} title="Añadir comentario">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
               </button>
               <button onClick={publicarArchivo} disabled={subiendo} className="flex-1 py-4 bg-blue-600 text-white font-bold rounded-2xl text-base shadow-[0_10px_25px_rgba(37,99,235,0.4)] hover:bg-blue-500 transition flex items-center justify-center gap-2">
@@ -540,10 +517,10 @@ export default function MuroEvento() {
       )}
 
       {visorHistorias !== null && (
-        <div className="fixed inset-0 z-[100] flex flex-col" style={{ backgroundColor: 'rgba(0, 0, 0, ' + Math.max(0, 1 - Math.abs(swipeOffset) / 400) + ')', transform: 'translateY(' + swipeOffset + 'px)', transition: swipeOffset === 0 ? 'transform 0.25s ease-out, background-color 0.25s ease-out' : 'none', touchAction: 'none' }} onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
+        <div className="fixed inset-0 z-[100] flex flex-col" style={{ backgroundColor: `rgba(0, 0, 0, ${Math.max(0, 1 - Math.abs(swipeOffset) / 400)})`, transform: `translateY(${swipeOffset}px)`, transition: swipeOffset === 0 ? 'transform 0.25s ease-out, background-color 0.25s ease-out' : 'none', touchAction: 'none' }} onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
           <div className="absolute top-0 w-full p-4 pt-6 flex flex-col gap-3 z-[110] bg-gradient-to-b from-black/80 to-transparent pointer-events-none">
             <div className="flex gap-1 w-full shadow-sm">
-              {visorHistorias.lista.map((_, i) => (<div key={i} className="h-1 flex-1 bg-white/30 rounded-full overflow-hidden"><div className="h-full bg-white transition-all duration-75 ease-linear" style={{ width: i === visorHistorias.currentIndex ? videoProgreso + '%' : i < visorHistorias.currentIndex ? '100%' : '0%' }}></div></div>))}
+              {visorHistorias.lista.map((_, i) => (<div key={i} className="h-1 flex-1 bg-white/30 rounded-full overflow-hidden"><div className="h-full bg-white transition-all duration-75 ease-linear" style={{ width: i === visorHistorias.currentIndex ? `${videoProgreso}%` : i < visorHistorias.currentIndex ? '100%' : '0%' }}></div></div>))}
             </div>
             <div className="flex justify-between items-center px-1 pointer-events-auto">
               <span className="text-white text-xs font-bold tracking-widest uppercase shadow-black drop-shadow-md">Historia</span>
@@ -591,12 +568,11 @@ export default function MuroEvento() {
         </div>
       )}
 
-      {/* --- VISOR DETALLADO DEL MURO (EFECTO SUAVE RESTAURADO) --- */}
       {itemActivoIndex !== null && (
         <div 
           className="fixed inset-0 z-[100] overflow-hidden backdrop-blur-sm" 
           style={{ 
-            backgroundColor: 'rgba(0, 0, 0, ' + Math.max(0, 0.95 - Math.abs(muroSwipeOffset.y) / 400) + ')', 
+            backgroundColor: `rgba(0, 0, 0, ${Math.max(0, 0.95 - Math.abs(muroSwipeOffset.y) / 400)})`, 
             transition: isSwipingMuro ? 'none' : 'background-color 0.3s ease-out', 
             touchAction: 'none' 
           }}
@@ -609,10 +585,9 @@ export default function MuroEvento() {
           {itemActivoIndex > 0 && <button onClick={retrocederItemMuro} className="absolute left-4 top-1/2 -translate-y-1/2 text-white text-4xl bg-black/40 rounded-full w-12 h-12 flex items-center justify-center pb-2 z-[120] hover:bg-black/60 hidden sm:flex">‹</button>}
           {itemActivoIndex < itemsMuro.length - 1 && <button onClick={avanzarItemMuro} className="absolute right-4 top-1/2 -translate-y-1/2 text-white text-4xl bg-black/40 rounded-full w-12 h-12 flex items-center justify-center pb-2 z-[120] hover:bg-black/60 hidden sm:flex">›</button>}
 
-          {/* CONTENEDOR CON LA MAGIA DEL SWIPE SUAVE RESTAURADA */}
           <div 
             className="relative w-full h-full" 
-            style={{ transform: 'translateY(' + muroSwipeOffset.y + 'px)', transition: isSwipingMuro ? 'none' : 'transform 0.3s ease-out' }} 
+            style={{ transform: `translateY(${muroSwipeOffset.y}px)`, transition: isSwipingMuro ? 'none' : 'transform 0.3s ease-out' }} 
             onTouchStart={handleMuroTouchStart} 
             onTouchMove={handleMuroTouchMove} 
             onTouchEnd={handleMuroTouchEnd}
@@ -623,11 +598,11 @@ export default function MuroEvento() {
                 <div 
                   key={item.id} 
                   className="absolute inset-0 w-full h-full flex items-center justify-center" 
-                  style={{ transform: 'translateX(calc(' + ((index - itemActivoIndex) * 100) + '% + ' + muroSwipeOffset.x + 'px))', transition: isSwipingMuro ? 'none' : 'transform 0.35s cubic-bezier(0.25, 0.8, 0.25, 1)' }}
+                  style={{ transform: `translateX(calc(${((index - itemActivoIndex) * 100)}% + ${muroSwipeOffset.x}px))`, transition: isSwipingMuro ? 'none' : 'transform 0.35s cubic-bezier(0.25, 0.8, 0.25, 1)' }}
                   onClick={() => { if(panelInteractivoAbierto) setPanelInteractivoAbierto(false); }}
                 >
                   {item.tipo === 'video' ? (
-                    <video id={'video-muro-' + index} src={item.url} playsInline controls={index === itemActivoIndex} onTimeUpdate={manejarTiempoMuro} className={'max-w-full max-h-full object-contain ' + (index === itemActivoIndex ? 'pointer-events-auto z-50' : 'pointer-events-none')} />
+                    <video id={`video-muro-${index}`} src={item.url} playsInline controls={index === itemActivoIndex} onTimeUpdate={manejarTiempoMuro} className={`max-w-full max-h-full object-contain ${index === itemActivoIndex ? 'pointer-events-auto z-50' : 'pointer-events-none'}`} />
                   ) : (
                     <img src={item.url} className="max-w-full max-h-full object-contain pointer-events-none" alt="Visor" />
                   )}
@@ -649,7 +624,7 @@ export default function MuroEvento() {
                 onClick={(e) => esAnonimo ? alertaAnonimo(e) : handleLike(e, itemActivo)}
                 className="flex items-center gap-2 text-sm font-semibold transition active:scale-125"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={usuarioDioLikeActivo ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={'w-6 h-6 ' + (usuarioDioLikeActivo ? 'text-red-500' : 'text-white')}><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={usuarioDioLikeActivo ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`w-6 h-6 ${usuarioDioLikeActivo ? 'text-red-500' : 'text-white'}`}><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
                 {(itemActivo?.likesArray || []).length > 0 && <span>{(itemActivo?.likesArray || []).length}</span>}
               </button>
 
@@ -664,13 +639,13 @@ export default function MuroEvento() {
                   <div className="flex gap-4">
                     <button 
                       onClick={() => setPestañaActiva('comentarios')}
-                      className={'text-xs font-bold uppercase tracking-wider transition pb-1 ' + (pestañaActiva === 'comentarios' ? 'text-zinc-100 border-b-2 border-blue-500' : 'text-zinc-500')}
+                      className={`text-xs font-bold uppercase tracking-wider transition pb-1 ${pestañaActiva === 'comentarios' ? 'text-zinc-100 border-b-2 border-blue-500' : 'text-zinc-500'}`}
                     >
                       Comentarios
                     </button>
                     <button 
                       onClick={() => setPestañaActiva('likes')}
-                      className={'text-xs font-bold uppercase tracking-wider transition pb-1 ' + (pestañaActiva === 'likes' ? 'text-zinc-100 border-b-2 border-red-500' : 'text-zinc-500')}
+                      className={`text-xs font-bold uppercase tracking-wider transition pb-1 ${pestañaActiva === 'likes' ? 'text-zinc-100 border-b-2 border-red-500' : 'text-zinc-500'}`}
                     >
                       Me gusta
                     </button>
@@ -749,9 +724,9 @@ export default function MuroEvento() {
           {historiasOrdenadas.map((historia, index) => {
             const visto = historiasVistas.includes(historia.id);
             return (
-              <button key={historia.id} onClick={() => abrirHistoria(index)} className={'flex-shrink-0 relative rounded-[16px] p-[2px] transition-all transform hover:scale-95 ' + (visto ? 'bg-gray-300' : 'bg-blue-500')}>
+              <button key={historia.id} onClick={() => abrirHistoria(index)} className={`flex-shrink-0 relative rounded-[16px] p-[2px] transition-all transform hover:scale-95 ${visto ? 'bg-gray-300' : 'bg-blue-500'}`}>
                 <div className="w-14 h-20 bg-black rounded-[14px] overflow-hidden border-[2px] border-white relative flex items-center justify-center">
-                  <video src={historia.url} className={'w-full h-full object-cover transition-opacity duration-300 ' + (visto ? 'opacity-50' : 'opacity-80')} />
+                  <video src={historia.url} className={`w-full h-full object-cover transition-opacity duration-300 ${visto ? 'opacity-50' : 'opacity-80'}`} />
                   {!visto && <span className="absolute bottom-1 bg-black/60 text-white px-1.5 py-0.5 rounded text-[8px] font-bold tracking-widest">NUEVO</span>}
                 </div>
               </button>
@@ -761,7 +736,7 @@ export default function MuroEvento() {
       </header>
 
       <main 
-        className={'flex-1 overflow-y-auto pb-32 transition-all duration-300 ' + mainPadding}
+        className={`flex-1 overflow-y-auto pb-32 transition-all duration-300 ${mainPadding}`}
         onTouchStart={handlePinchStart}
         onTouchMove={handlePinchMove}
         onTouchEnd={handlePinchEnd}
@@ -769,7 +744,7 @@ export default function MuroEvento() {
         {itemsMuro.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center text-gray-400 mt-10"><div className="text-6xl mb-4 opacity-30">📷</div><p className="text-sm font-medium">Aún no hay contenido en el muro.</p></div>
         ) : (
-          <div className={'grid ' + gridColsClass + ' ' + gridGapClass + ' auto-rows-fr transition-all duration-300'}>
+          <div className={`grid ${gridColsClass} ${gridGapClass} auto-rows-fr transition-all duration-300`}>
             {itemsMuro.map((item, index) => {
               const totalLikes = (item.likesArray || []).length;
               const totalComentarios = (item.comentarios || []).length;
@@ -804,7 +779,7 @@ export default function MuroEvento() {
                       onClick={(e) => esAnonimo ? alertaAnonimo(e) : handleLike(e, item)}
                       className="flex items-center gap-1 text-xs font-semibold transition active:scale-125"
                     >
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={corazonRojo ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={'w-4 h-4 ' + (corazonRojo ? 'text-red-500' : 'text-white')}><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={corazonRojo ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`w-4 h-4 ${corazonRojo ? 'text-red-500' : 'text-white'}`}><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
                       {totalLikes > 0 && <span>{totalLikes}</span>}
                     </button>
 
@@ -826,7 +801,7 @@ export default function MuroEvento() {
               <button onClick={() => setMenuAbierto(false)} className="text-3xl font-light text-gray-400 leading-none pb-1">×</button>
             </div>
             
-            <button onClick={() => { alert('Bandeja de chats Privados en construcción (Siguiente fase)'); setMenuAbierto(false); }} className="flex items-center gap-3 text-sm font-bold text-gray-700 hover:text-blue-600 transition p-4 bg-gray-50 rounded-xl border border-gray-100 shadow-sm w-full text-left">
+            <button onClick={() => { alert('Bandeja de chats Privados en construcción'); setMenuAbierto(false); }} className="flex items-center gap-3 text-sm font-bold text-gray-700 hover:text-blue-600 transition p-4 bg-gray-50 rounded-xl border border-gray-100 shadow-sm w-full text-left">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
               Chats Privados
             </button>
@@ -844,7 +819,7 @@ export default function MuroEvento() {
       )}
 
       {columnasMuro > 2 && (
-        <div className="fixed bottom-28 right-6 z-20 transition-opacity">
+        <div className="fixed bottom-28 right-6 z-20 animate-fade-in">
           <button 
             onClick={ciclarColumnas}
             className="w-12 h-12 bg-white/90 backdrop-blur-md text-zinc-700 rounded-full shadow-lg border border-gray-200 flex items-center justify-center transition active:scale-90"
@@ -856,21 +831,10 @@ export default function MuroEvento() {
       )}
 
       <div className="fixed bottom-10 w-full flex justify-center z-20 pointer-events-none">
-        <button onClick={() => muroInputRef.current.click()} disabled={subiendo} className={'pointer-events-auto bg-blue-600 text-white w-16 h-16 rounded-full shadow-[0_10px_25px_rgba(37,99,235,0.4)] flex items-center justify-center text-4xl pb-1 hover:bg-blue-700 transition transform ' + (subiendo ? 'opacity-50 scale-95' : 'hover:-translate-y-1')}>
+        <button onClick={() => muroInputRef.current.click()} disabled={subiendo} className={`pointer-events-auto bg-blue-600 text-white w-16 h-16 rounded-full shadow-[0_10px_25px_rgba(37,99,235,0.4)] flex items-center justify-center text-4xl pb-1 hover:bg-blue-700 transition transform ${subiendo ? 'opacity-50 scale-95' : 'hover:-translate-y-1'}`}>
           {subiendo ? <span className="text-lg">⏳</span> : '+'}
         </button>
       </div>
     </div>
   );
-}
-`;
-
-fs.writeFileSync(path.join(__dirname, 'src/pages/[albumId]/index.js'), muroCode.trim());
-
-console.log("⏳ Subiendo cambios con el efecto suave restaurado a la rama (main)...");
-try {
-  execSync('git add . && git commit -m "UI: Restaurado desplazamiento fluido (swipe) horizontal y vertical en el visor del muro" && git push origin main', { stdio: 'inherit' });
-  console.log("🚀 ¡Actualización subida con éxito! Vercel está aplicando los cambios.");
-} catch (err) {
-  console.error("Error al subir a Git:", err);
 }
