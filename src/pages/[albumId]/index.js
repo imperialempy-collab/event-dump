@@ -448,7 +448,6 @@ export default function MuroEvento() {
       }
   };
 
-  // --- FUNCIÓN PARA COMPARTIR EL ÁLBUM ---
   const compartirAlbum = () => {
     const urlActual = window.location.href;
     if (navigator.share) {
@@ -477,6 +476,7 @@ export default function MuroEvento() {
   return (
     <div className="min-h-screen bg-[#f8f9fa] flex flex-col font-sans overflow-hidden relative">
       
+      {/* Inputs de archivos separados correctamente para muro e historia */}
       <input type="file" accept="image/*,video/*" ref={muroInputRef} onChange={(e) => handleFileSelected(e, 'muro')} style={{ display: 'none' }} />
       <input type="file" accept="image/*,video/*" ref={historiaInputRef} onChange={(e) => handleFileSelected(e, 'historia')} style={{ display: 'none' }} />
 
@@ -733,6 +733,7 @@ export default function MuroEvento() {
           <button onClick={() => setMenuAbierto(true)} className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-50 text-gray-600 pb-2 text-2xl">⋮</button>
         </div>
 
+        {/* Botón de + Historia conectado correctamente a historiaInputRef */}
         <div className="flex gap-3 overflow-x-auto mt-6 px-6 pb-2 [&::-webkit-scrollbar]:hidden items-center">
           <button onClick={() => historiaInputRef.current.click()} className="flex-shrink-0 w-14 h-20 rounded-[16px] bg-blue-50 border-2 border-dashed border-blue-400 flex flex-col items-center justify-center gap-1 text-blue-600 transition transform hover:scale-95" title="Subir Historia">
             <span className="text-2xl font-light">+</span><span className="text-[8px] font-bold uppercase tracking-wider">Historia</span>
@@ -853,6 +854,7 @@ export default function MuroEvento() {
         </div>
       )}
 
+      {/* Botón flotante principal conectado al muro */}
       <div className="fixed bottom-10 w-full flex justify-center z-20 pointer-events-none">
         <button onClick={() => muroInputRef.current.click()} disabled={subiendo} className={`pointer-events-auto bg-blue-600 text-white w-16 h-16 rounded-full shadow-[0_10px_25px_rgba(37,99,235,0.4)] flex items-center justify-center text-4xl pb-1 hover:bg-blue-700 transition transform ${subiendo ? 'opacity-50 scale-95' : 'hover:-translate-y-1'}`}>
           {subiendo ? <span className="text-lg">⏳</span> : '+'}
