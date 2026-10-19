@@ -17,7 +17,6 @@ export default function MuroEvento() {
   const [subiendo, setSubiendo] = useState(false);
 
   const muroInputRef = useRef(null);
-  const historiaInputRef = useRef(null);
 
   const [archivoEditando, setArchivoEditando] = useState(null); 
   const [mostrarCajaComentario, setMostrarCajaComentario] = useState(false);
@@ -116,20 +115,19 @@ export default function MuroEvento() {
 
   const getTime = (item) => item.creadoEn?.toMillis ? item.creadoEn.toMillis() : (item.creadoEn ? new Date(item.creadoEn).getTime() : 0);
 
-  const archivosValidos = archivos.filter(a => (Date.now() - 5 * 24 * 60 * 60 * 1000) < getTime(a));
-  const itemsMuro = archivosValidos.filter(a => a.tipo === 'imagen' || a.destino === 'muro');
+  // Todo va al muro ahora
+  const itemsMuro = archivos;
   
-  const historias = archivosValidos.filter(a => {
-    if (a.tipo !== 'video' || a.destino === 'muro') return false;
-    return getTime(a) > (Date.now() - 5 * 24 * 60 * 60 * 1000);
-  });
-
-  const historiasOrdenadas = [...historias].sort((a, b) => {
-    const aVisto = historiasVistas.includes(a.id);
-    const bVisto = historiasVistas.includes(b.id);
-    if (aVisto === bVisto) return getTime(b) - getTime(a);
-    return aVisto ? 1 : -1;
-  });
+  // RANKING: Top 10 con más likes
+  const topRanking = [...itemsMuro]
+    .filter(a => (a.likesArray || []).length > 0) // Debe tener al menos 1 like para entrar al ranking
+    .sort((a, b) => {
+      const likesA = (a.likesArray || []).length;
+      const likesB = (b.likesArray || []).length;
+      if (likesB !== likesA) return likesB - likesA; // Ordenar por likes
+      return getTime(b) - getTime(a); // Desempate: el más reciente primero
+    })
+    .slice(0, 10);
 
   const handlePinchStart = (e) => {
     if (e.touches.length === 2) {
@@ -170,7 +168,7 @@ export default function MuroEvento() {
     });
   };
 
-  const handleFileSelected = (e, destino) => {
+  const handleFileSelected = (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
@@ -180,7 +178,6 @@ export default function MuroEvento() {
       file,
       previewUrl: URL.createObjectURL(file),
       tipo,
-      destino,
       comentario: ''
     });
     setMostrarCajaComentario(false);
@@ -220,7 +217,7 @@ export default function MuroEvento() {
       await addDoc(collection(db, 'albums', albumId, 'fotos'), {
         url: urlDescarga,
         tipo: archivoEditando.tipo,
-        destino: archivoEditando.destino,
+        destino: 'muro', // Todo va al muro
         likesArray: [],
         likesData: [],
         comentarios: comentariosIniciales,
@@ -275,6 +272,7 @@ export default function MuroEvento() {
 
   const handleLike = async (e, item) => {
     e.stopPropagation();
+    if (!item) return;
     try {
       const docRef = doc(db, 'albums', albumId, 'fotos', item.id);
       const yaDioLike = (item.likesArray || []).includes(usuarioId);
@@ -301,30 +299,27 @@ export default function MuroEvento() {
     }
   };
 
-  const enviarComentario = async (e) => {
-    e.preventDefault();
-    if (!nuevoComentarioTexto.trim() || itemActivoIndex === null) return;
-    const itemActual = itemsMuro[itemActivoIndex];
-    if (!itemActual) return;
-
+  const enviarComentarioDirecto = async (texto, item) => {
+    if (!texto.trim() || !item) return;
     try {
-      const docRef = doc(db, 'albums', albumId, 'fotos', itemActual.id);
+      const docRef = doc(db, 'albums', albumId, 'fotos', item.id);
       const nuevoComentario = {
         id: Date.now().toString(),
-        texto: nuevoComentarioTexto.trim(),
+        texto: texto.trim(),
         autorId: usuarioId,
         autorNombre: usuarioNombre,
         creadoEn: new Date().toISOString()
       };
+      await updateDoc(docRef, { comentarios: arrayUnion(nuevoComentario) });
+    } catch (err) { console.error(err); }
+  };
 
-      await updateDoc(docRef, {
-        comentarios: arrayUnion(nuevoComentario)
-      });
-
-      setNuevoComentarioTexto('');
-    } catch (err) {
-      console.error(err);
-    }
+  const enviarComentario = async (e) => {
+    e.preventDefault();
+    if (!nuevoComentarioTexto.trim() || itemActivoIndex === null) return;
+    const itemActual = itemsMuro[itemActivoIndex];
+    await enviarComentarioDirecto(nuevoComentarioTexto, itemActual);
+    setNuevoComentarioTexto('');
   };
 
   useEffect(() => {
@@ -353,18 +348,39 @@ export default function MuroEvento() {
 
   const abrirHistoria = (index) => { 
     openModal();
-    setVisorHistorias({ lista: historiasOrdenadas, currentIndex: index }); 
+    setVisorHistorias({ lista: topRanking, currentIndex: index }); 
     setVideoProgreso(0); 
     setSwipeOffset(0); 
-    marcarComoVista(historiasOrdenadas[index].id); 
+    marcarComoVista(topRanking[index].id); 
   };
   
   const manejarTiempoHistoria = (e) => {
       if (e.target.currentTime >= 10) avanzarHistoria();
   };
 
-  const avanzarHistoria = (e) => { if (e) e.stopPropagation(); if (visorHistorias.currentIndex < visorHistorias.lista.length - 1) { setVisorHistorias({ ...visorHistorias, currentIndex: visorHistorias.currentIndex + 1 }); setVideoProgreso(0); marcarComoVista(visorHistorias.lista[visorHistorias.currentIndex + 1].id); } else cerrarVisorHistorias(); };
-  const retrocederHistoria = (e) => { if (e) e.stopPropagation(); if (visorHistorias.currentIndex > 0) { setVisorHistorias({ ...visorHistorias, currentIndex: visorHistorias.currentIndex - 1 }); setVideoProgreso(0); marcarComoVista(visorHistorias.lista[visorHistorias.currentIndex - 1].id); } };
+  const avanzarHistoria = (e) => { 
+    if (e) e.stopPropagation(); 
+    setVisorHistorias(prev => {
+      if (!prev) return null;
+      if (prev.currentIndex < prev.lista.length - 1) {
+        marcarComoVista(prev.lista[prev.currentIndex + 1].id);
+        setVideoProgreso(0);
+        return { ...prev, currentIndex: prev.currentIndex + 1 };
+      } else {
+        cerrarVisorHistorias();
+        return null;
+      }
+    });
+  };
+
+  const retrocederHistoria = (e) => { 
+    if (e) e.stopPropagation(); 
+    if (visorHistorias.currentIndex > 0) { 
+        setVisorHistorias({ ...visorHistorias, currentIndex: visorHistorias.currentIndex - 1 }); 
+        setVideoProgreso(0); 
+        marcarComoVista(visorHistorias.lista[visorHistorias.currentIndex - 1].id); 
+    } 
+  };
   
   const cerrarVisorHistorias = () => { 
     setVisorHistorias(null); 
@@ -377,6 +393,33 @@ export default function MuroEvento() {
       if (e.target.duration > 0) setVideoProgreso((e.target.currentTime / Math.min(e.target.duration, 10)) * 100); 
       manejarTiempoHistoria(e);
   };
+
+  // Efecto para animar el progreso si es imagen en el visor de historias
+  useEffect(() => {
+    let interval;
+    if (visorHistorias) {
+        const itemActivo = visorHistorias.lista[visorHistorias.currentIndex];
+        if (itemActivo && itemActivo.tipo !== 'video') {
+            interval = setInterval(() => {
+                setVideoProgreso(prev => {
+                    if (prev >= 100) return 100;
+                    return prev + 2; // Llena la barra en 5 segundos (2% cada 100ms)
+                });
+            }, 100);
+        }
+    }
+    return () => clearInterval(interval);
+  }, [visorHistorias?.currentIndex]);
+
+  // Avanzar automáticamente cuando la barra llega a 100 en imágenes
+  useEffect(() => {
+    if (visorHistorias && videoProgreso >= 100) {
+        const itemActivo = visorHistorias.lista[visorHistorias.currentIndex];
+        if (itemActivo && itemActivo.tipo !== 'video') {
+            avanzarHistoria();
+        }
+    }
+  }, [videoProgreso]);
 
   const handleTouchStart = (e) => { touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }; setSwipeOffset(0); };
   const handleTouchMove = (e) => { const diffY = e.touches[0].clientY - touchStartRef.current.y; const diffX = e.touches[0].clientX - touchStartRef.current.x; if (Math.abs(diffY) > Math.abs(diffX) && Math.abs(diffY) > 10) setSwipeOffset(diffY); };
@@ -472,21 +515,21 @@ export default function MuroEvento() {
 
   const itemActivo = itemActivoIndex !== null ? itemsMuro[itemActivoIndex] : null;
   const usuarioDioLikeActivo = itemActivo ? (itemActivo.likesArray || []).includes(usuarioId) : false;
+  
+  const historiaActiva = visorHistorias ? visorHistorias.lista[visorHistorias.currentIndex] : null;
+  const usuarioDioLikeHistoria = historiaActiva ? (historiaActiva.likesArray || []).includes(usuarioId) : false;
 
   return (
     <div className="min-h-screen bg-[#f8f9fa] flex flex-col font-sans overflow-hidden relative">
       
-      {/* Inputs de archivos separados correctamente para muro e historia */}
-      <input type="file" accept="image/*,video/*" ref={muroInputRef} onChange={(e) => handleFileSelected(e, 'muro')} style={{ display: 'none' }} />
-      <input type="file" accept="image/*,video/*" ref={historiaInputRef} onChange={(e) => handleFileSelected(e, 'historia')} style={{ display: 'none' }} />
+      {/* Input de archivos general */}
+      <input type="file" accept="image/*,video/*" ref={muroInputRef} onChange={handleFileSelected} style={{ display: 'none' }} />
 
       {archivoEditando !== null && (
         <div className="fixed inset-0 bg-black z-[150] flex flex-col justify-between p-6 transition-opacity">
           <div className="flex justify-between items-center text-white z-10">
             <button onClick={cancelarEdicion} className="text-sm font-medium text-zinc-400 hover:text-white transition">Cancelar</button>
-            <span className="text-xs font-bold uppercase tracking-widest text-zinc-300">
-              {archivoEditando.destino === 'muro' ? 'Nueva Publicación' : 'Nueva Historia'}
-            </span>
+            <span className="text-xs font-bold uppercase tracking-widest text-zinc-300">Nueva Publicación</span>
             <div className="w-10"></div>
           </div>
 
@@ -499,14 +542,6 @@ export default function MuroEvento() {
           </div>
 
           <div className="relative z-10 flex flex-col gap-3 pb-6 pointer-events-none">
-             {archivoEditando.tipo === 'video' && archivoEditando.destino === 'historia' && (
-                <div className="w-full text-center mb-1">
-                   <span className="text-xs text-white/80 bg-black/40 px-3 py-1.5 rounded-full backdrop-blur-sm border border-white/10 shadow-lg">
-                       Se mostrarán solo los 10 segundos
-                   </span>
-                </div>
-            )}
-
             {mostrarCajaComentario && (
               <div className="w-full bg-black/80 backdrop-blur-md p-3 rounded-2xl pointer-events-auto">
                 <input 
@@ -539,12 +574,16 @@ export default function MuroEvento() {
               {visorHistorias.lista.map((_, i) => (<div key={i} className="h-1 flex-1 bg-white/30 rounded-full overflow-hidden"><div className="h-full bg-white transition-all duration-75 ease-linear" style={{ width: i === visorHistorias.currentIndex ? `${videoProgreso}%` : i < visorHistorias.currentIndex ? '100%' : '0%' }}></div></div>))}
             </div>
             <div className="flex justify-between items-center px-1 pointer-events-auto">
-              <span className="text-white text-xs font-bold tracking-widest uppercase shadow-black drop-shadow-md">Historia</span>
+              <span className="text-white text-xs font-bold tracking-widest uppercase shadow-black drop-shadow-md">TOP RANKING #{visorHistorias.currentIndex + 1}</span>
               <button onClick={cerrarVisorHistorias} className="text-white text-3xl font-light leading-none shadow-black drop-shadow-md pb-1">×</button>
             </div>
           </div>
           
-          <video src={visorHistorias.lista[visorHistorias.currentIndex].url} autoPlay playsInline onTimeUpdate={handleTimeUpdate} className="w-full h-full object-cover" />
+          {historiaActiva?.tipo === 'video' ? (
+             <video src={historiaActiva.url} autoPlay playsInline onTimeUpdate={handleTimeUpdate} className="w-full h-full object-cover" />
+          ) : (
+             <img src={historiaActiva?.url} alt="Top Rank" className="w-full h-full object-cover" />
+          )}
           
           <div className="absolute inset-y-0 left-0 w-[30%] z-[100]" onClick={retrocederHistoria}></div>
           <div className="absolute inset-y-0 right-0 w-[70%] z-[100]" onClick={avanzarHistoria}></div>
@@ -552,31 +591,28 @@ export default function MuroEvento() {
           <div className="absolute bottom-6 inset-x-4 z-[120] flex gap-2 pointer-events-auto" onTouchStart={e => e.stopPropagation()}>
             {esAnonimo ? (
               <div onClick={alertaAnonimo} className="flex-1 bg-black/40 backdrop-blur-md border border-white/20 rounded-full px-4 py-3 flex items-center justify-center cursor-pointer">
-                <span className="text-white/80 text-xs font-medium tracking-wide">Inicia sesión para responder</span>
+                <span className="text-white/80 text-xs font-medium tracking-wide">Inicia sesión para interactuar</span>
               </div>
             ) : (
               <>
                 <input 
                   type="text" 
-                  placeholder="Responder a la historia..." 
+                  placeholder="Comentar en esta publicación..." 
                   className="flex-1 bg-black/40 backdrop-blur-md border border-white/20 rounded-full px-4 py-3 text-xs text-white placeholder-white/70 outline-none shadow-lg"
                   onClick={(e) => e.stopPropagation()}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && e.target.value.trim() !== '') {
                       e.preventDefault();
-                      alert('Mensaje enviado.');
+                      enviarComentarioDirecto(e.target.value, historiaActiva);
                       e.target.value = '';
                     }
                   }}
                 />
                 <button 
                   className="w-11 h-11 bg-black/40 backdrop-blur-md border border-white/20 rounded-full flex items-center justify-center text-white shadow-lg transition active:scale-90"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    alert('Me gusta enviado de forma privada.');
-                  }}
+                  onClick={(e) => handleLike(e, historiaActiva)}
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={usuarioDioLikeHistoria ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`w-5 h-5 ${usuarioDioLikeHistoria ? 'text-red-500' : 'text-white'}`}><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
                 </button>
               </>
             )}
@@ -733,23 +769,36 @@ export default function MuroEvento() {
           <button onClick={() => setMenuAbierto(true)} className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-50 text-gray-600 pb-2 text-2xl">⋮</button>
         </div>
 
-        {/* Botón de + Historia conectado correctamente a historiaInputRef */}
-        <div className="flex gap-3 overflow-x-auto mt-6 px-6 pb-2 [&::-webkit-scrollbar]:hidden items-center">
-          <button onClick={() => historiaInputRef.current.click()} className="flex-shrink-0 w-14 h-20 rounded-[16px] bg-blue-50 border-2 border-dashed border-blue-400 flex flex-col items-center justify-center gap-1 text-blue-600 transition transform hover:scale-95" title="Subir Historia">
-            <span className="text-2xl font-light">+</span><span className="text-[8px] font-bold uppercase tracking-wider">Historia</span>
-          </button>
-          {historiasOrdenadas.map((historia, index) => {
-            const visto = historiasVistas.includes(historia.id);
-            return (
-              <button key={historia.id} onClick={() => abrirHistoria(index)} className={`flex-shrink-0 relative rounded-[16px] p-[2px] transition-all transform hover:scale-95 ${visto ? 'bg-gray-300' : 'bg-blue-500'}`}>
-                <div className="w-14 h-20 bg-black rounded-[14px] overflow-hidden border-[2px] border-white relative flex items-center justify-center">
-                  <video src={historia.url} className={`w-full h-full object-cover transition-opacity duration-300 ${visto ? 'opacity-50' : 'opacity-80'}`} />
-                  {!visto && <span className="absolute bottom-1 bg-black/60 text-white px-1.5 py-0.5 rounded text-[8px] font-bold tracking-widest">NUEVO</span>}
-                </div>
-              </button>
-            );
-          })}
-        </div>
+        {/* Carrusel de TOP 10 Ranking */}
+        {topRanking.length > 0 && (
+          <div className="flex gap-3 overflow-x-auto mt-6 px-6 pb-2 [&::-webkit-scrollbar]:hidden items-center">
+            {topRanking.map((item, index) => {
+              const visto = historiasVistas.includes(item.id);
+              return (
+                <button key={item.id} onClick={() => abrirHistoria(index)} className={`flex-shrink-0 relative rounded-[16px] p-[2px] transition-all transform hover:scale-95 ${visto ? 'bg-gray-200' : 'bg-gradient-to-tr from-blue-500 to-purple-500'}`}>
+                  <div className="w-14 h-20 bg-black rounded-[14px] overflow-hidden border-[2px] border-white relative flex items-center justify-center">
+                    {item.tipo === 'video' ? (
+                      <video src={item.url} className={`w-full h-full object-cover transition-opacity duration-300 ${visto ? 'opacity-50' : 'opacity-90'}`} />
+                    ) : (
+                      <img src={item.url} className={`w-full h-full object-cover transition-opacity duration-300 ${visto ? 'opacity-50' : 'opacity-90'}`} />
+                    )}
+                    
+                    {/* Badge con el número del ranking */}
+                    <span className="absolute top-1 left-1 bg-black/70 text-white px-1.5 py-0.5 rounded-md text-[9px] font-black tracking-widest shadow-md">
+                      #{index + 1}
+                    </span>
+                    
+                    {/* Contador de likes en la miniatura */}
+                    <div className="absolute bottom-1 right-1 flex items-center gap-0.5 text-[9px] font-bold text-white bg-black/60 px-1 rounded-full">
+                       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-2.5 h-2.5 text-red-500"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                       {(item.likesArray || []).length}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </header>
 
       <main 
@@ -823,11 +872,6 @@ export default function MuroEvento() {
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
                 Compartir Álbum
               </button>
-
-              <button onClick={() => { alert('Bandeja de chats Privados en construcción'); setMenuAbierto(false); }} className="flex items-center gap-3 text-sm font-bold text-gray-700 hover:text-blue-600 transition p-4 bg-gray-50 rounded-xl border border-gray-100 shadow-sm w-full text-left">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
-                Chats Privados
-              </button>
             </div>
 
             <div className="mt-auto border-t border-gray-100 pt-4">
@@ -854,7 +898,7 @@ export default function MuroEvento() {
         </div>
       )}
 
-      {/* Botón flotante principal conectado al muro */}
+      {/* Botón flotante principal de + conectado al muro */}
       <div className="fixed bottom-10 w-full flex justify-center z-20 pointer-events-none">
         <button onClick={() => muroInputRef.current.click()} disabled={subiendo} className={`pointer-events-auto bg-blue-600 text-white w-16 h-16 rounded-full shadow-[0_10px_25px_rgba(37,99,235,0.4)] flex items-center justify-center text-4xl pb-1 hover:bg-blue-700 transition transform ${subiendo ? 'opacity-50 scale-95' : 'hover:-translate-y-1'}`}>
           {subiendo ? <span className="text-lg">⏳</span> : '+'}
