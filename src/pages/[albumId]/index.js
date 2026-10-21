@@ -316,8 +316,18 @@ export default function MuroEvento() {
 
   const enviarComentario = async (e) => {
     e.preventDefault();
-    if (!nuevoComentarioTexto.trim() || itemActivoIndex === null) return;
-    const itemActual = itemsMuro[itemActivoIndex];
+    if (!nuevoComentarioTexto.trim()) return;
+
+    // Detectamos si el usuario está viendo el Muro o las Historias para enviar al elemento correcto
+    let itemActual = null;
+    if (visorHistorias !== null) {
+      itemActual = visorHistorias.lista[visorHistorias.currentIndex];
+    } else if (itemActivoIndex !== null) {
+      itemActual = itemsMuro[itemActivoIndex];
+    }
+
+    if (!itemActual) return;
+
     await enviarComentarioDirecto(nuevoComentarioTexto, itemActual);
     setNuevoComentarioTexto('');
   };
@@ -338,6 +348,20 @@ export default function MuroEvento() {
     }
   }, [itemActivoIndex]);
 
+  // Pausar video de historia si se abre el panel de comentarios
+  useEffect(() => {
+    if (visorHistorias !== null) {
+      const video = document.getElementById('video-historia');
+      if (video) {
+        if (panelInteractivoAbierto) {
+          video.pause();
+        } else {
+          video.play().catch(err => console.log(err));
+        }
+      }
+    }
+  }, [panelInteractivoAbierto, visorHistorias?.currentIndex]);
+
   const marcarComoVista = (id) => {
     if (!historiasVistas.includes(id)) {
       const nuevasVistas = [...historiasVistas, id];
@@ -351,15 +375,24 @@ export default function MuroEvento() {
     setVisorHistorias({ lista: topRanking, currentIndex: index }); 
     setVideoProgreso(0); 
     setSwipeOffset(0); 
+    setPanelInteractivoAbierto(false);
     marcarComoVista(topRanking[index].id); 
   };
   
   const manejarTiempoHistoria = (e) => {
-      if (e.target.currentTime >= 10) avanzarHistoria();
+      // Solo avanza si el panel de comentarios NO está abierto
+      if (e.target.currentTime >= 10 && !panelInteractivoAbierto) avanzarHistoria();
   };
 
   const avanzarHistoria = (e) => { 
     if (e) e.stopPropagation(); 
+    
+    // Si el panel de comentarios está abierto, un clic lateral solo lo cierra
+    if (panelInteractivoAbierto) {
+      setPanelInteractivoAbierto(false);
+      return;
+    }
+
     setVisorHistorias(prev => {
       if (!prev) return null;
       if (prev.currentIndex < prev.lista.length - 1) {
@@ -375,6 +408,13 @@ export default function MuroEvento() {
 
   const retrocederHistoria = (e) => { 
     if (e) e.stopPropagation(); 
+    
+    // Si el panel de comentarios está abierto, un clic lateral solo lo cierra
+    if (panelInteractivoAbierto) {
+      setPanelInteractivoAbierto(false);
+      return;
+    }
+
     if (visorHistorias.currentIndex > 0) { 
         setVisorHistorias({ ...visorHistorias, currentIndex: visorHistorias.currentIndex - 1 }); 
         setVideoProgreso(0); 
@@ -386,6 +426,7 @@ export default function MuroEvento() {
     setVisorHistorias(null); 
     setVideoProgreso(0); 
     setSwipeOffset(0); 
+    setPanelInteractivoAbierto(false);
     closeModal();
   };
 
@@ -397,7 +438,8 @@ export default function MuroEvento() {
   // Efecto para animar el progreso si es imagen en el visor de historias
   useEffect(() => {
     let interval;
-    if (visorHistorias) {
+    // Solo avanza la barra de la foto si el panel NO está abierto
+    if (visorHistorias && !panelInteractivoAbierto) {
         const itemActivo = visorHistorias.lista[visorHistorias.currentIndex];
         if (itemActivo && itemActivo.tipo !== 'video') {
             interval = setInterval(() => {
@@ -409,11 +451,11 @@ export default function MuroEvento() {
         }
     }
     return () => clearInterval(interval);
-  }, [visorHistorias?.currentIndex]);
+  }, [visorHistorias?.currentIndex, panelInteractivoAbierto]);
 
   // Avanzar automáticamente cuando la barra llega a 100 en imágenes
   useEffect(() => {
-    if (visorHistorias && videoProgreso >= 100) {
+    if (visorHistorias && videoProgreso >= 100 && !panelInteractivoAbierto) {
         const itemActivo = visorHistorias.lista[visorHistorias.currentIndex];
         if (itemActivo && itemActivo.tipo !== 'video') {
             avanzarHistoria();
@@ -567,6 +609,7 @@ export default function MuroEvento() {
         </div>
       )}
 
+      {/* VISOR DE HISTORIAS / TOP RANKING */}
       {visorHistorias !== null && (
         <div className="fixed inset-0 z-[100] flex flex-col" style={{ backgroundColor: `rgba(0, 0, 0, ${Math.max(0, 1 - Math.abs(swipeOffset) / 400)})`, transform: `translateY(${swipeOffset}px)`, transition: swipeOffset === 0 ? 'transform 0.25s ease-out, background-color 0.25s ease-out' : 'none', touchAction: 'none' }} onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
           <div className="absolute top-0 w-full p-4 pt-6 flex flex-col gap-3 z-[110] bg-gradient-to-b from-black/80 to-transparent pointer-events-none">
@@ -580,7 +623,7 @@ export default function MuroEvento() {
           </div>
           
           {historiaActiva?.tipo === 'video' ? (
-             <video src={historiaActiva.url} autoPlay playsInline onTimeUpdate={handleTimeUpdate} className="w-full h-full object-cover" />
+             <video id="video-historia" src={historiaActiva.url} autoPlay playsInline onTimeUpdate={handleTimeUpdate} className="w-full h-full object-cover" />
           ) : (
              <img src={historiaActiva?.url} alt="Top Rank" className="w-full h-full object-cover" />
           )}
@@ -588,38 +631,102 @@ export default function MuroEvento() {
           <div className="absolute inset-y-0 left-0 w-[30%] z-[100]" onClick={retrocederHistoria}></div>
           <div className="absolute inset-y-0 right-0 w-[70%] z-[100]" onClick={avanzarHistoria}></div>
 
-          <div className="absolute bottom-6 inset-x-4 z-[120] flex gap-2 pointer-events-auto" onTouchStart={e => e.stopPropagation()}>
-            {esAnonimo ? (
-              <div onClick={alertaAnonimo} className="flex-1 bg-black/40 backdrop-blur-md border border-white/20 rounded-full px-4 py-3 flex items-center justify-center cursor-pointer">
-                <span className="text-white/80 text-xs font-medium tracking-wide">Inicia sesión para interactuar</span>
+          {/* Panel y Botones para HISTORIAS idéntico al Muro */}
+          <div className="absolute bottom-0 inset-x-0 p-6 pb-8 bg-gradient-to-t from-black via-black/80 to-transparent flex flex-col gap-4 z-[120] pointer-events-none">
+            
+            <div className="flex items-center justify-end gap-6 text-white pointer-events-auto">
+              <button onClick={() => { setPanelInteractivoAbierto(true); setPestañaActiva('comentarios'); }} className="flex items-center gap-2 text-sm font-semibold transition active:scale-110">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                {(historiaActiva?.comentarios || []).length > 0 && <span>{(historiaActiva?.comentarios || []).length}</span>}
+              </button>
+
+              <button 
+                onClick={(e) => esAnonimo ? alertaAnonimo(e) : handleLike(e, historiaActiva)}
+                className="flex items-center gap-2 text-sm font-semibold transition active:scale-125"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={usuarioDioLikeHistoria ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`w-6 h-6 ${usuarioDioLikeHistoria ? 'text-red-500' : 'text-white'}`}><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                {(historiaActiva?.likesArray || []).length > 0 && <span>{(historiaActiva?.likesArray || []).length}</span>}
+              </button>
+            </div>
+
+            {panelInteractivoAbierto && (
+              <div 
+                className="bg-zinc-900/95 backdrop-blur-md rounded-2xl p-4 max-h-72 flex flex-col gap-3 border border-white/10 shadow-2xl pointer-events-auto"
+                onClick={(e) => e.stopPropagation()} 
+              >
+                <div className="flex justify-between items-center border-b border-white/10 pb-2">
+                  <div className="flex gap-4">
+                    <button 
+                      onClick={() => setPestañaActiva('comentarios')}
+                      className={`text-xs font-bold uppercase tracking-wider transition pb-1 ${pestañaActiva === 'comentarios' ? 'text-zinc-100 border-b-2 border-blue-500' : 'text-zinc-500'}`}
+                    >
+                      Comentarios
+                    </button>
+                    <button 
+                      onClick={() => setPestañaActiva('likes')}
+                      className={`text-xs font-bold uppercase tracking-wider transition pb-1 ${pestañaActiva === 'likes' ? 'text-zinc-100 border-b-2 border-red-500' : 'text-zinc-500'}`}
+                    >
+                      Me gusta
+                    </button>
+                  </div>
+                  <button onClick={() => setPanelInteractivoAbierto(false)} className="text-zinc-400 text-2xl leading-none pb-1">×</button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto flex flex-col gap-2 pr-1">
+                  {pestañaActiva === 'comentarios' ? (
+                    (historiaActiva?.comentarios || []).length === 0 ? (
+                      <p className="text-xs text-zinc-500 text-center py-4">Aún no hay comentarios. ¡Sé el primero en comentar!</p>
+                    ) : (
+                      (historiaActiva?.comentarios || []).map(c => (
+                        <div key={c.id} className="bg-white/5 p-2.5 rounded-xl flex flex-col gap-1">
+                          <span className="text-[11px] font-bold text-blue-400">{c.autorNombre}</span>
+                          <p className="text-xs text-zinc-200 leading-relaxed">{c.texto}</p>
+                        </div>
+                      ))
+                    )
+                  ) : (
+                    (historiaActiva?.likesData || []).length === 0 ? (
+                      <p className="text-xs text-zinc-500 text-center py-4">Aún no hay Me gusta.</p>
+                    ) : (
+                      (historiaActiva?.likesData || []).map((like, i) => (
+                        <div key={i} className="flex items-center gap-3 bg-white/5 p-2.5 rounded-xl">
+                          <div className="w-7 h-7 bg-red-500/20 rounded-full flex items-center justify-center">
+                            <svg className="w-3.5 h-3.5 text-red-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                          </div>
+                          <span className="text-xs font-bold text-zinc-200">{like.nombre || 'Usuario'}</span>
+                        </div>
+                      ))
+                    )
+                  )}
+                </div>
+
+                {pestañaActiva === 'comentarios' && (
+                  <div className="pt-1 border-t border-white/10 mt-1">
+                    {esAnonimo ? (
+                      <div className="p-3 bg-white/5 border border-white/10 rounded-xl text-center cursor-pointer" onClick={alertaAnonimo}>
+                        <p className="text-xs font-medium text-zinc-400">Inicia sesión para comentar</p>
+                      </div>
+                    ) : (
+                      <form onSubmit={enviarComentario} className="flex gap-2">
+                        <input 
+                          type="text" 
+                          placeholder="Escribe un comentario..." 
+                          value={nuevoComentarioTexto}
+                          onChange={(e) => setNuevoComentarioTexto(e.target.value)}
+                          className="flex-1 bg-white/10 text-white placeholder-zinc-400 px-3 py-2.5 rounded-xl outline-none text-xs border border-white/10"
+                        />
+                        <button type="submit" className="bg-blue-600 text-white px-4 py-2.5 rounded-xl text-xs font-bold shadow-md hover:bg-blue-500 transition">Enviar</button>
+                      </form>
+                    )}
+                  </div>
+                )}
               </div>
-            ) : (
-              <>
-                <input 
-                  type="text" 
-                  placeholder="Comentar en esta publicación..." 
-                  className="flex-1 bg-black/40 backdrop-blur-md border border-white/20 rounded-full px-4 py-3 text-xs text-white placeholder-white/70 outline-none shadow-lg"
-                  onClick={(e) => e.stopPropagation()}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && e.target.value.trim() !== '') {
-                      e.preventDefault();
-                      enviarComentarioDirecto(e.target.value, historiaActiva);
-                      e.target.value = '';
-                    }
-                  }}
-                />
-                <button 
-                  className="w-11 h-11 bg-black/40 backdrop-blur-md border border-white/20 rounded-full flex items-center justify-center text-white shadow-lg transition active:scale-90"
-                  onClick={(e) => handleLike(e, historiaActiva)}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={usuarioDioLikeHistoria ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`w-5 h-5 ${usuarioDioLikeHistoria ? 'text-red-500' : 'text-white'}`}><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-                </button>
-              </>
             )}
           </div>
         </div>
       )}
 
+      {/* VISOR DEL MURO */}
       {itemActivoIndex !== null && (
         <div 
           className="fixed inset-0 z-[100] overflow-hidden backdrop-blur-sm" 
@@ -663,6 +770,7 @@ export default function MuroEvento() {
             })}
           </div>
 
+          {/* Panel y Botones para MURO */}
           <div className="absolute bottom-0 inset-x-0 p-6 pb-8 bg-gradient-to-t from-black via-black/80 to-transparent flex flex-col gap-4 z-[130] pointer-events-none">
             
             <div className="flex items-center justify-end gap-6 text-white pointer-events-auto">
@@ -783,12 +891,10 @@ export default function MuroEvento() {
                       <img src={item.url} className={`w-full h-full object-cover transition-opacity duration-300 ${visto ? 'opacity-50' : 'opacity-90'}`} />
                     )}
                     
-                    {/* Badge con el número del ranking */}
                     <span className="absolute top-1 left-1 bg-black/70 text-white px-1.5 py-0.5 rounded-md text-[9px] font-black tracking-widest shadow-md">
                       #{index + 1}
                     </span>
                     
-                    {/* Contador de likes en la miniatura */}
                     <div className="absolute bottom-1 right-1 flex items-center gap-0.5 text-[9px] font-bold text-white bg-black/60 px-1 rounded-full">
                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-2.5 h-2.5 text-red-500"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
                        {(item.likesArray || []).length}
