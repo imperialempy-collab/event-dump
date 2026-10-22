@@ -118,7 +118,7 @@ export default function MuroEvento() {
   // Todo va al muro ahora
   const itemsMuro = archivos;
   
-  // RANKING: Top 10 con más likes
+// RANKING: Todas las publicaciones con Me gusta
   const topRanking = [...itemsMuro]
     .filter(a => (a.likesArray || []).length > 0) // Debe tener al menos 1 like para entrar al ranking
     .sort((a, b) => {
@@ -126,8 +126,7 @@ export default function MuroEvento() {
       const likesB = (b.likesArray || []).length;
       if (likesB !== likesA) return likesB - likesA; // Ordenar por likes
       return getTime(b) - getTime(a); // Desempate: el más reciente primero
-    })
-    .slice(0, 10);
+    });
 
   const handlePinchStart = (e) => {
     if (e.touches.length === 2) {
