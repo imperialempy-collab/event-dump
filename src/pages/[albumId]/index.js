@@ -118,7 +118,7 @@ export default function MuroEvento() {
   // Todo va al muro ahora
   const itemsMuro = archivos;
   
-// RANKING: Todas las publicaciones con Me gusta
+  // RANKING: Todas las publicaciones con Me gusta
   const topRanking = [...itemsMuro]
     .filter(a => (a.likesArray || []).length > 0) // Debe tener al menos 1 like para entrar al ranking
     .sort((a, b) => {
@@ -547,10 +547,21 @@ export default function MuroEvento() {
     setMenuAbierto(false);
   };
 
-  const copiarLinkPantalla = () => {
+  const compartirTransmision = () => {
     const urlPantalla = `${window.location.origin}/${albumId}/pantalla`;
-    navigator.clipboard.writeText(urlPantalla);
-    alert('¡Link de la Pantalla Gigante copiado!\nYa puedes enviarlo por WhatsApp al operador.');
+    
+    // Si el celular soporta el menú nativo de compartir (como WhatsApp, etc.)
+    if (navigator.share) {
+      navigator.share({
+        title: 'Transmisión en Vivo - ' + (album?.nombreEvento || 'Evento'),
+        text: 'Abre este enlace en la computadora conectada a la pantalla gigante:',
+        url: urlPantalla,
+      }).catch(() => {});
+    } else {
+      // Si está en una PC o no soporta compartir nativo, lo copia
+      navigator.clipboard.writeText(urlPantalla);
+      alert('¡Link de transmisión copiado!\nEnvíalo a la computadora de la pantalla gigante.');
+    }
     setMenuAbierto(false);
   };
 
@@ -980,13 +991,16 @@ export default function MuroEvento() {
             </div>
             
             <div className="flex flex-col gap-3">
+              {/* Botón 1: Compartir Álbum (Invitados) */}
               <button onClick={compartirAlbum} className="flex items-center gap-3 text-sm font-bold text-gray-700 hover:text-blue-600 transition p-4 bg-gray-50 rounded-xl border border-gray-100 shadow-sm w-full text-left">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
                 Compartir Álbum
               </button>
-              <button onClick={copiarLinkPantalla} className="flex items-center gap-3 text-sm font-bold text-gray-700 hover:text-purple-600 transition p-4 bg-gray-50 rounded-xl border border-gray-100 shadow-sm w-full text-left">
+              
+              {/* Botón 2: Compartir Transmisión (Operador Pantalla) */}
+              <button onClick={compartirTransmision} className="flex items-center gap-3 text-sm font-bold text-gray-700 hover:text-red-600 transition p-4 bg-gray-50 rounded-xl border border-gray-100 shadow-sm w-full text-left">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5"><rect x="2" y="7" width="20" height="15" rx="2" ry="2"></rect><polyline points="17 2 12 7 7 2"></polyline></svg>
-                Link para Pantalla Gigante
+                Transmisión
               </button>
             </div>
 
