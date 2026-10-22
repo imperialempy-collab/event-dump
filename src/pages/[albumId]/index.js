@@ -547,6 +547,13 @@ export default function MuroEvento() {
     setMenuAbierto(false);
   };
 
+  const copiarLinkPantalla = () => {
+    const urlPantalla = `${window.location.origin}/${albumId}/pantalla`;
+    navigator.clipboard.writeText(urlPantalla);
+    alert('¡Link de la Pantalla Gigante copiado!\nYa puedes enviarlo por WhatsApp al operador.');
+    setMenuAbierto(false);
+  };
+
   if (cargando) return <div className="min-h-screen flex items-center justify-center font-sans">Cargando...</div>;
   if (!album) return null;
 
@@ -976,6 +983,10 @@ export default function MuroEvento() {
               <button onClick={compartirAlbum} className="flex items-center gap-3 text-sm font-bold text-gray-700 hover:text-blue-600 transition p-4 bg-gray-50 rounded-xl border border-gray-100 shadow-sm w-full text-left">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
                 Compartir Álbum
+              </button>
+              <button onClick={copiarLinkPantalla} className="flex items-center gap-3 text-sm font-bold text-gray-700 hover:text-purple-600 transition p-4 bg-gray-50 rounded-xl border border-gray-100 shadow-sm w-full text-left">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5"><rect x="2" y="7" width="20" height="15" rx="2" ry="2"></rect><polyline points="17 2 12 7 7 2"></polyline></svg>
+                Link para Pantalla Gigante
               </button>
             </div>
 
