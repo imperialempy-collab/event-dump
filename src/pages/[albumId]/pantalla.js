@@ -1,6 +1,6 @@
 import { useRouter } from 'next/router';
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { db } from '../../../firebase/config';
+import { db } from '../../firebase/config';
 import { doc, getDoc, collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 
 // Componente para las estrellitas de fondo
