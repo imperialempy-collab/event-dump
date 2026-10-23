@@ -250,27 +250,15 @@ export default function PantallaGigante() {
         </div>
       )}
 
-      {/* --- PANTALLA EN VIVO (Múltiples capas con Aceleración Gráfica) --- */}
+      {/* --- PANTALLA EN VIVO (Fondo Negro + Aceleración Gráfica) --- */}
       {transmisionIniciada && (
         <>
-          {/* CAPA 1: Fondo Difuminado Dinámico (Acelerado GPU) */}
-          {currentItem && (
-            <div 
-              key={`bg-${currentItem.id}`}
-              className="absolute inset-0 z-0 opacity-40 transition-all duration-1000"
-              style={{
-                backgroundImage: `url(${currentItem.tipo === 'video' ? '' : currentItem.url})`,
-                backgroundSize: 'cover', backgroundPosition: 'center', filter: 'blur(60px) brightness(0.7) saturate(1.5)',
-                transform: 'scale(1.2) translateZ(0)',
-                willChange: 'transform, opacity'
-              }}
-            />
-          )}
+          {/* El fondo negro viene del contenedor principal (bg-black). Ya no hay capa difuminada pesada. */}
 
-          {/* CAPA 2: Partículas (Estrellitas) */}
+          {/* CAPA 1: Partículas (Estrellitas) */}
           <ParticulasFondo />
 
-          {/* CAPA 3: Contenedor de Medios con Animación de Arrastre */}
+          {/* CAPA 2: Contenedor de Medios con Animación de Arrastre */}
           <div className="absolute inset-0 w-full h-full">
             
             {/* Item Anterior (Saliendo) - Z-index 10, Key única, translateZ para GPU */}
@@ -321,7 +309,7 @@ export default function PantallaGigante() {
             )}
           </div>
 
-          {/* CAPA 4: Controles del Operador (Ocultos al no mover el mouse) */}
+          {/* CAPA 3: Controles del Operador (Ocultos al no mover el mouse) */}
           <div className={`absolute bottom-10 left-10 z-50 flex gap-4 transition-opacity duration-500 ${showControls ? 'opacity-100' : 'opacity-0'}`}>
             <button onClick={() => setIsPaused(!isPaused)} className="w-16 h-16 bg-white/10 backdrop-blur-lg border border-white/20 rounded-full flex items-center justify-center text-white hover:bg-white/20 transition shadow-xl" title={isPaused ? "Reanudar" : "Pausar"}>
               {isPaused ? <span className="text-3xl pl-1">▶</span> : <span className="text-3xl font-black">II</span>}

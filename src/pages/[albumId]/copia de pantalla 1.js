@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { db } from '../../firebase/config';
 import { doc, getDoc, collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 
-// Componente para las estrellitas de fondo
+// Componente para las estrellitas de fondo (Optimizadas para GPU)
 const ParticulasFondo = () => {
   const particles = useMemo(() => Array.from({ length: 40 }).map((_, i) => ({
     id: i,
@@ -15,14 +15,15 @@ const ParticulasFondo = () => {
   })), []);
 
   return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
+    <div className="absolute inset-0 overflow-hidden pointer-events-none z-0" style={{ transform: 'translateZ(0)', willChange: 'transform' }}>
       {particles.map(p => (
         <div key={p.id} className="absolute bg-white rounded-full shadow-[0_0_8px_rgba(255,255,255,0.8)]"
           style={{
             left: p.left, width: p.size, height: p.size, bottom: '-10px',
             opacity: p.opacity,
             animation: `floatUp ${p.animationDuration} linear infinite`,
-            animationDelay: p.animationDelay
+            animationDelay: p.animationDelay,
+            willChange: 'transform, opacity'
           }}
         />
       ))}
@@ -34,12 +35,12 @@ const ParticulasFondo = () => {
           100% { transform: translateY(-105vh) scale(1.5); opacity: 0; }
         }
         @keyframes slideInRight {
-          from { transform: translateX(100%); }
-          to { transform: translateX(0); }
+          from { transform: translateX(100%) translateZ(0); }
+          to { transform: translateX(0) translateZ(0); }
         }
         @keyframes slideOutLeft {
-          from { transform: translateX(0); }
-          to { transform: translateX(-100%); }
+          from { transform: translateX(0) translateZ(0); }
+          to { transform: translateX(-100%) translateZ(0); }
         }
         .anim-slide-in { animation: slideInRight 0.7s cubic-bezier(0.25, 0.8, 0.25, 1) forwards; }
         .anim-slide-out { animation: slideOutLeft 0.7s cubic-bezier(0.25, 0.8, 0.25, 1) forwards; }
@@ -55,6 +56,10 @@ export default function PantallaGigante() {
   const [archivos, setArchivos] = useState([]);
   const [cargando, setCargando] = useState(true);
   
+  // Estados de Rendimiento y Lobby
+  const [transmisionIniciada, setTransmisionIniciada] = useState(false);
+  const [preparandoBuffer, setPreparandoBuffer] = useState(true);
+
   const [colaReproduccion, setColaReproduccion] = useState([]);
   const [currentItem, setCurrentItem] = useState(null);
   const [prevItem, setPrevItem] = useState(null);
@@ -106,7 +111,18 @@ export default function PantallaGigante() {
     return [...ranking, ...muro];
   };
 
-  // 3. Motor de avance
+  // Inicializar la cola vacía en segundo plano para que el Buffer empiece a chupar datos
+  useEffect(() => {
+    if (archivos.length > 0 && colaReproduccion.length === 0 && !currentItem) {
+      setColaReproduccion(generarNuevaCola());
+      
+      // Temporizador del Lobby: da 2.5 seg exactos para precargar en RAM las primeras imágenes
+      const t = setTimeout(() => setPreparandoBuffer(false), 2500);
+      return () => clearTimeout(t);
+    }
+  }, [archivos]);
+
+  // 3. Motor de avance (SOLUCIÓN GHOSTING 750ms y Capas)
   const avanzar = () => {
     let nextItem;
     let nuevaCola = [...colaReproduccion];
@@ -131,13 +147,18 @@ export default function PantallaGigante() {
       setPrevItem(currentItem);
       setCurrentItem(nextItem);
       setIsAnimating(true);
-      setTimeout(() => setIsAnimating(false), 700); // Duración de la animación CSS
+      
+      // CORRECCIÓN ANTI-PARPADEO: Damos 750ms a JS (50ms extra de seguridad) 
+      // para asegurar que la animación de CSS (700ms) ya terminó al 100%
+      setTimeout(() => setIsAnimating(false), 750); 
     }
   };
 
   // 4. Temporizador Automático (8 Segundos para imágenes)
   useEffect(() => {
-    // Si no hay item actual pero ya cargaron los datos, arrancar la máquina
+    // Proteger: Si el operador no ha iniciado la transmisión, el tiempo no corre.
+    if (!transmisionIniciada) return;
+
     if (!currentItem && archivos.length > 0) {
       avanzar();
       return;
@@ -147,13 +168,22 @@ export default function PantallaGigante() {
     
     timerRef.current = setTimeout(() => { avanzar(); }, 8000);
     return () => clearTimeout(timerRef.current);
-  }, [currentItem, isPaused, interrupciones, archivos.length]);
+  }, [currentItem, isPaused, interrupciones, archivos.length, transmisionIniciada]);
 
   // Controles del Operador
+  const iniciarTransmisionManual = () => {
+    setAudioHabilitado(true); // El clic del operador destraba la seguridad del navegador para el audio
+    setTransmisionIniciada(true);
+    
+    if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(() => {});
+    }
+  };
+
   const reiniciar = () => {
     setInterrupciones([]);
     setColaReproduccion(generarNuevaCola());
-    setCurrentItem(null); // Fuerzo a que el useEffect lo vuelva a arrancar limpio
+    setCurrentItem(null); 
     setIsPaused(false);
   };
 
@@ -161,6 +191,14 @@ export default function PantallaGigante() {
     if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
     else document.exitFullscreen();
   };
+
+  // Determinar los siguientes elementos a cargar en RAM oculta (El Buffer Invisible)
+  const itemsParaPrecargar = useMemo(() => {
+    const lista = [];
+    if (interrupciones.length > 0) lista.push(...interrupciones);
+    if (colaReproduccion.length > 0) lista.push(...colaReproduccion.slice(0, 4)); // Precarga las próximas 4
+    return lista.filter((item, index, self) => index === self.findIndex((t) => t.id === item.id)); // Elimina duplicados
+  }, [interrupciones, colaReproduccion]);
 
   if (cargando) return <div className="min-h-screen bg-black flex items-center justify-center text-white/50 text-2xl tracking-widest uppercase">Conectando...</div>;
   if (archivos.length === 0) return <div className="min-h-screen bg-black flex items-center justify-center text-white/50 text-2xl tracking-widest uppercase">Esperando contenido...</div>;
@@ -170,93 +208,139 @@ export default function PantallaGigante() {
       className="min-h-screen bg-black flex flex-col font-sans overflow-hidden relative cursor-default select-none"
       onMouseMove={() => { setShowControls(true); clearTimeout(window.controlsTimeout); window.controlsTimeout = setTimeout(() => setShowControls(false), 3000); }}
     >
-      {/* CAPA 1: Fondo Difuminado Dinámico */}
-      {currentItem && (
-        <div 
-          className="absolute inset-0 z-0 opacity-40 transition-all duration-1000"
-          style={{
-            backgroundImage: `url(${currentItem.tipo === 'video' ? '' : currentItem.url})`,
-            backgroundSize: 'cover', backgroundPosition: 'center', filter: 'blur(60px) brightness(0.7) saturate(1.5)',
-            transform: 'scale(1.2)'
-          }}
-        />
+      
+      {/* EL BUFFER INVISIBLE (Descarga a memoria RAM en la TV sin mostrarlo) */}
+      <div style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 0, height: 0, overflow: 'hidden', zIndex: -100 }}>
+        {itemsParaPrecargar.map(item => (
+          item.tipo === 'video' ? (
+             <video key={`buf-${item.id}`} src={item.url} preload="auto" muted />
+          ) : (
+             <img key={`buf-${item.id}`} src={item.url} alt="preload" />
+          )
+        ))}
+      </div>
+
+      {/* --- LOBBY DE ESPERA (Antes de Iniciar) --- */}
+      {!transmisionIniciada && (
+        <div className="absolute inset-0 z-[200] flex flex-col items-center justify-center bg-zinc-900 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-zinc-800 to-black text-white">
+            <h1 className="text-5xl font-black mb-10 tracking-widest uppercase text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500 drop-shadow-2xl">
+              Social Wall
+            </h1>
+            
+            {preparandoBuffer ? (
+              <div className="flex flex-col items-center gap-4 animate-pulse">
+                <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                <p className="text-xl font-medium tracking-wider text-zinc-300">Preparando motor gráfico y caché...</p>
+              </div>
+            ) : (
+              <button 
+                onClick={iniciarTransmisionManual}
+                className="group relative px-10 py-5 bg-blue-600 rounded-full font-bold text-2xl tracking-widest uppercase shadow-[0_0_40px_rgba(37,99,235,0.6)] hover:scale-105 hover:bg-blue-500 transition-all duration-300 overflow-hidden"
+              >
+                <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out"></div>
+                <span className="relative flex items-center gap-3">
+                  ▶ Iniciar Transmisión
+                </span>
+              </button>
+            )}
+            
+            <p className="absolute bottom-10 text-zinc-500 text-sm tracking-widest uppercase">
+              {archivos.length} publicaciones listas
+            </p>
+        </div>
       )}
 
-      {/* CAPA 2: Partículas (Estrellitas) */}
-      <ParticulasFondo />
+      {/* --- PANTALLA EN VIVO (Múltiples capas con Aceleración Gráfica) --- */}
+      {transmisionIniciada && (
+        <>
+          {/* CAPA 1: Fondo Difuminado Dinámico (Acelerado GPU) */}
+          {currentItem && (
+            <div 
+              key={`bg-${currentItem.id}`}
+              className="absolute inset-0 z-0 opacity-40 transition-all duration-1000"
+              style={{
+                backgroundImage: `url(${currentItem.tipo === 'video' ? '' : currentItem.url})`,
+                backgroundSize: 'cover', backgroundPosition: 'center', filter: 'blur(60px) brightness(0.7) saturate(1.5)',
+                transform: 'scale(1.2) translateZ(0)',
+                willChange: 'transform, opacity'
+              }}
+            />
+          )}
 
-      {/* CAPA 3: Contenedor de Medios con Animación de Arrastre */}
-      <div className="absolute inset-0 z-10 w-full h-full">
-        
-        {/* Item Anterior (saliendo) */}
-        {prevItem && isAnimating && (
-          <div className="absolute inset-0 w-full h-full flex items-center justify-center anim-slide-out p-12">
-            {prevItem.tipo === 'video' ? (
-              <video src={prevItem.url} className="w-full h-full object-contain drop-shadow-2xl rounded-3xl" />
-            ) : (
-              <img src={prevItem.url} className="w-full h-full object-contain drop-shadow-2xl rounded-3xl" />
-            )}
-          </div>
-        )}
+          {/* CAPA 2: Partículas (Estrellitas) */}
+          <ParticulasFondo />
 
-        {/* Item Actual (entrando / estático) */}
-        {currentItem && (
-          <div className={`absolute inset-0 w-full h-full flex items-center justify-center p-12 ${isAnimating ? 'anim-slide-in' : ''}`}>
+          {/* CAPA 3: Contenedor de Medios con Animación de Arrastre */}
+          <div className="absolute inset-0 w-full h-full">
             
-            <div className="relative w-full h-full flex items-center justify-center">
-              {currentItem.tipo === 'video' ? (
-                <video src={currentItem.url} autoPlay muted={!audioHabilitado} playsInline onEnded={avanzar} className="w-full h-full object-contain drop-shadow-[0_20px_50px_rgba(0,0,0,0.7)] rounded-3xl border border-white/10" />
-              ) : (
-                <img src={currentItem.url} className="w-full h-full object-contain drop-shadow-[0_20px_50px_rgba(0,0,0,0.7)] rounded-3xl border border-white/10" />
-              )}
-
-              {/* Indicadores Minimalistas (Likes y Comentarios) flotando sobre la imagen */}
-              <div className="absolute bottom-6 right-6 flex items-center gap-4 bg-black/40 backdrop-blur-xl px-6 py-3 rounded-full border border-white/10 shadow-2xl">
-                {/* Comentarios */}
-                {(currentItem.comentarios || []).length > 0 && (
-                  <div className="flex items-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-7 h-7 text-white/90"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
-                    <span className="text-white font-bold text-2xl">{(currentItem.comentarios || []).length}</span>
-                  </div>
-                )}
-                
-                {/* Divisor si hay ambos */}
-                {(currentItem.comentarios || []).length > 0 && (currentItem.likesArray || []).length > 0 && (
-                  <div className="w-px h-8 bg-white/20"></div>
-                )}
-
-                {/* Likes */}
-                {(currentItem.likesArray || []).length > 0 && (
-                  <div className="flex items-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-8 h-8 text-red-500 drop-shadow-md"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-                    <span className="text-white font-bold text-2xl drop-shadow-md">{(currentItem.likesArray || []).length}</span>
-                  </div>
+            {/* Item Anterior (Saliendo) - Z-index 10, Key única, translateZ para GPU */}
+            {prevItem && isAnimating && (
+              <div key={`prev-${prevItem.id}`} className="absolute inset-0 w-full h-full flex items-center justify-center anim-slide-out p-12 z-10" style={{ transform: 'translateZ(0)', willChange: 'transform' }}>
+                {prevItem.tipo === 'video' ? (
+                  <video src={prevItem.url} className="w-full h-full object-contain drop-shadow-2xl rounded-3xl" />
+                ) : (
+                  <img src={prevItem.url} className="w-full h-full object-contain drop-shadow-2xl rounded-3xl" />
                 )}
               </div>
-            </div>
+            )}
 
+            {/* Item Actual (Entrando / Estático) - Z-index 20 (encima siempre), Key única */}
+            {currentItem && (
+              <div key={`curr-${currentItem.id}`} className={`absolute inset-0 w-full h-full flex items-center justify-center p-12 z-20 ${isAnimating ? 'anim-slide-in' : ''}`} style={{ transform: 'translateZ(0)', willChange: 'transform' }}>
+                
+                <div className="relative w-full h-full flex items-center justify-center">
+                  {currentItem.tipo === 'video' ? (
+                    <video src={currentItem.url} autoPlay muted={!audioHabilitado} playsInline onEnded={avanzar} className="w-full h-full object-contain drop-shadow-[0_20px_50px_rgba(0,0,0,0.7)] rounded-3xl border border-white/10" />
+                  ) : (
+                    <img src={currentItem.url} className="w-full h-full object-contain drop-shadow-[0_20px_50px_rgba(0,0,0,0.7)] rounded-3xl border border-white/10" />
+                  )}
+
+                  {/* Indicadores Minimalistas (Likes y Comentarios) */}
+                  <div className="absolute bottom-6 right-6 flex items-center gap-4 bg-black/40 backdrop-blur-xl px-6 py-3 rounded-full border border-white/10 shadow-2xl" style={{ transform: 'translateZ(0)' }}>
+                    {(currentItem.comentarios || []).length > 0 && (
+                      <div className="flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-7 h-7 text-white/90"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                        <span className="text-white font-bold text-2xl">{(currentItem.comentarios || []).length}</span>
+                      </div>
+                    )}
+                    
+                    {(currentItem.comentarios || []).length > 0 && (currentItem.likesArray || []).length > 0 && (
+                      <div className="w-px h-8 bg-white/20"></div>
+                    )}
+
+                    {(currentItem.likesArray || []).length > 0 && (
+                      <div className="flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-8 h-8 text-red-500 drop-shadow-md"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                        <span className="text-white font-bold text-2xl drop-shadow-md">{(currentItem.likesArray || []).length}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+              </div>
+            )}
           </div>
-        )}
-      </div>
 
-      {/* CAPA 4: Controles del Operador (Ocultos al no mover el mouse) */}
-      <div className={`absolute bottom-10 left-10 z-50 flex gap-4 transition-opacity duration-500 ${showControls ? 'opacity-100' : 'opacity-0'}`}>
-        <button onClick={() => setIsPaused(!isPaused)} className="w-16 h-16 bg-white/10 backdrop-blur-lg border border-white/20 rounded-full flex items-center justify-center text-white hover:bg-white/20 transition shadow-xl" title={isPaused ? "Reanudar" : "Pausar"}>
-          {isPaused ? <span className="text-3xl pl-1">▶</span> : <span className="text-3xl font-black">II</span>}
-        </button>
-        
-        <button onClick={() => setAudioHabilitado(!audioHabilitado)} className={`w-16 h-16 backdrop-blur-lg border rounded-full flex items-center justify-center text-white transition shadow-xl ${audioHabilitado ? 'bg-blue-600/60 border-blue-400 hover:bg-blue-500/80' : 'bg-white/10 border-white/20 hover:bg-white/20'}`} title={audioHabilitado ? "Silenciar" : "Activar Sonido"}>
-          {audioHabilitado ? <span className="text-2xl">🔊</span> : <span className="text-2xl">🔇</span>}
-        </button>
+          {/* CAPA 4: Controles del Operador (Ocultos al no mover el mouse) */}
+          <div className={`absolute bottom-10 left-10 z-50 flex gap-4 transition-opacity duration-500 ${showControls ? 'opacity-100' : 'opacity-0'}`}>
+            <button onClick={() => setIsPaused(!isPaused)} className="w-16 h-16 bg-white/10 backdrop-blur-lg border border-white/20 rounded-full flex items-center justify-center text-white hover:bg-white/20 transition shadow-xl" title={isPaused ? "Reanudar" : "Pausar"}>
+              {isPaused ? <span className="text-3xl pl-1">▶</span> : <span className="text-3xl font-black">II</span>}
+            </button>
+            
+            <button onClick={() => setAudioHabilitado(!audioHabilitado)} className={`w-16 h-16 backdrop-blur-lg border rounded-full flex items-center justify-center text-white transition shadow-xl ${audioHabilitado ? 'bg-blue-600/60 border-blue-400 hover:bg-blue-500/80' : 'bg-white/10 border-white/20 hover:bg-white/20'}`} title={audioHabilitado ? "Silenciar" : "Activar Sonido"}>
+              {audioHabilitado ? <span className="text-2xl">🔊</span> : <span className="text-2xl">🔇</span>}
+            </button>
 
-        <button onClick={reiniciar} className="px-8 h-16 bg-red-600/80 backdrop-blur-lg border border-red-400/50 rounded-full flex items-center justify-center text-white font-bold tracking-widest hover:bg-red-500/80 transition shadow-xl">
-          REINICIAR TRANSMISIÓN
-        </button>
-        
-        <button onClick={toggleFullscreen} className="w-16 h-16 bg-white/10 backdrop-blur-lg border border-white/20 rounded-full flex items-center justify-center text-white hover:bg-white/20 transition shadow-xl" title="Pantalla Completa">
-          <span className="text-2xl">⛶</span>
-        </button>
-      </div>
+            <button onClick={reiniciar} className="px-8 h-16 bg-red-600/80 backdrop-blur-lg border border-red-400/50 rounded-full flex items-center justify-center text-white font-bold tracking-widest hover:bg-red-500/80 transition shadow-xl">
+              REINICIAR TRANSMISIÓN
+            </button>
+            
+            <button onClick={toggleFullscreen} className="w-16 h-16 bg-white/10 backdrop-blur-lg border border-white/20 rounded-full flex items-center justify-center text-white hover:bg-white/20 transition shadow-xl" title="Pantalla Completa">
+              <span className="text-2xl">⛶</span>
+            </button>
+          </div>
+        </>
+      )}
 
     </div>
   );
