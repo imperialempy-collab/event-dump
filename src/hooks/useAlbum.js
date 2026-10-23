@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { db } from '../firebase/config';
-import { collection, doc, setDoc, getDoc } from 'firebase/firestore';
+import { collection, doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
 import { REGLAS_APP, ESTADOS_ALBUM } from '../constants/reglas';
+import { RETOS_POR_DEFECTO } from '../constants/retosBase';
 
 export const useAlbum = () => {
   const [cargando, setCargando] = useState(false);
@@ -10,7 +11,6 @@ export const useAlbum = () => {
   const crearAlbum = async (creadorId, fechaEventoStr, configuracionCliente) => {
     setCargando(true);
     try {
-      // Calculamos que se borre en 24 horas si no paga
       const fechaExpiracion = new Date();
       fechaExpiracion.setHours(fechaExpiracion.getHours() + REGLAS_APP.TRIAL_LIMITES.HORAS_AUTODESTRUCCION);
 
@@ -24,12 +24,12 @@ export const useAlbum = () => {
         fechaExpiracion: fechaExpiracion.toISOString(),
         configuracion: {
           permiteDescargas: configuracionCliente.permiteDescargas ?? true,
-          soloCamara: configuracionCliente.soloCamara ?? false, // Bloquea galería si es true
+          soloCamara: configuracionCliente.soloCamara ?? false,
           permiteComentarios: configuracionCliente.permiteComentarios ?? true,
           permiteLikes: configuracionCliente.permiteLikes ?? true,
           tieneRetos: configuracionCliente.tieneRetos ?? true,
           audiosPublicos: configuracionCliente.audiosPublicos ?? false,
-          juezRetosId: configuracionCliente.juezRetosId ?? null, // Nulo = automático
+          juezRetosId: configuracionCliente.juezRetosId ?? null,
         },
         contadores: {
           fotos: 0,
@@ -37,6 +37,7 @@ export const useAlbum = () => {
           audios: 0,
           retos: 0
         },
+        listaRetos: RETOS_POR_DEFECTO, // <-- Inyectamos la lista de 30 retos aquí
         creadoEn: new Date().toISOString()
       };
 
@@ -66,20 +67,30 @@ export const useAlbum = () => {
     }
   };
 
-  // 3. Función CRÍTICA: Verifica si puede subir (Revisa límites del TRIAL)
+  // 3. Función CRÍTICA: Verifica si puede subir
   const puedeSubirAccion = (album, tipoAccion) => {
-    // Si ya pagó, tiene vía libre infinita
     if (album.estado === ESTADOS_ALBUM.PAGADO) return true;
 
-    // Si es TRIAL, revisamos los contadores
     const limites = REGLAS_APP.TRIAL_LIMITES;
     if (tipoAccion === 'FOTO' && album.contadores.fotos >= limites.FOTOS) return false;
     if (tipoAccion === 'HISTORIA' && album.contadores.historias >= limites.HISTORIAS) return false;
     if (tipoAccion === 'AUDIO' && album.contadores.audios >= limites.AUDIOS) return false;
     if (tipoAccion === 'RETO' && album.contadores.retos >= limites.RETOS) return false;
 
-    return true; // Si no superó el límite, le damos permiso
+    return true;
   };
 
-  return { crearAlbum, obtenerAlbum, puedeSubirAccion, cargando };
+  // 4. NUEVA FUNCIÓN: Actualizar lista de retos (Para el panel de configuración)
+  const actualizarRetos = async (albumId, nuevaListaRetos) => {
+    try {
+      const docRef = doc(db, 'albums', albumId);
+      await updateDoc(docRef, { listaRetos: nuevaListaRetos });
+      return true;
+    } catch (error) {
+      console.error("Error actualizando retos:", error);
+      throw error;
+    }
+  };
+
+  return { crearAlbum, obtenerAlbum, puedeSubirAccion, actualizarRetos, cargando };
 };
