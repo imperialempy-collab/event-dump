@@ -995,7 +995,7 @@ export default function MuroEvento() {
             
             <div className="flex flex-col gap-3">
  
-<div className="flex flex-col gap-3">
+
               {/* Botón 0: Sorteo de Retos (NUEVO) */}
               <button onClick={() => { setMostrarSorteo(true); setMenuAbierto(false); }} className="flex items-center gap-3 text-sm font-bold text-white bg-gradient-to-r from-purple-600 to-blue-600 hover:scale-105 transition p-4 rounded-xl shadow-lg w-full text-left mb-2">
                 <span className="text-xl">🎲</span>
