@@ -4,8 +4,10 @@ import { db, storage } from '../../firebase/config';
 import { doc, getDoc, collection, addDoc, onSnapshot, query, orderBy, updateDoc, increment, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useAuthContext } from '../../context/AuthContext';
+import SorteoReto from '../../components/SorteoReto';
 
 export default function MuroEvento() {
+  const [mostrarSorteo, setMostrarSorteo] = useState(false);
   const router = useRouter();
   const { albumId } = router.query;
   const { usuario, loginConGoogle, cerrarSesion } = useAuthContext();
@@ -858,6 +860,7 @@ export default function MuroEvento() {
                   )}
                 </div>
 
+
                 {pestañaActiva === 'comentarios' && (
                   <div className="pt-1 border-t border-white/10 mt-1">
                     {esAnonimo ? (
@@ -991,7 +994,17 @@ export default function MuroEvento() {
             </div>
             
             <div className="flex flex-col gap-3">
-              {/* Botón 1: Compartir Álbum (Invitados) */}
+ 
+<div className="flex flex-col gap-3">
+              {/* Botón 0: Sorteo de Retos (NUEVO) */}
+              <button onClick={() => { setMostrarSorteo(true); setMenuAbierto(false); }} className="flex items-center gap-3 text-sm font-bold text-white bg-gradient-to-r from-purple-600 to-blue-600 hover:scale-105 transition p-4 rounded-xl shadow-lg w-full text-left mb-2">
+                <span className="text-xl">🎲</span>
+                ¡Sorteo de Retos!
+              </button>
+
+
+
+ {/* Botón 1: Compartir Álbum (Invitados) */}
               <button onClick={compartirAlbum} className="flex items-center gap-3 text-sm font-bold text-gray-700 hover:text-blue-600 transition p-4 bg-gray-50 rounded-xl border border-gray-100 shadow-sm w-full text-left">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
                 Compartir Álbum
@@ -1059,6 +1072,11 @@ export default function MuroEvento() {
           {subiendo ? <span className="text-lg">⏳</span> : '+'}
         </button>
       </div>
+	  {/* COMPONENTE DE SORTEO FLOTANTE */}
+      {mostrarSorteo && (
+        <SorteoReto album={album} onClose={() => setMostrarSorteo(false)} />
+      )}
+	  
     </div>
   );
 }
