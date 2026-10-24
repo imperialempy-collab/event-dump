@@ -231,7 +231,7 @@ export default function MuroEvento() {
         formData.append('file', archivoEditando.file);
         
         // Aquí va el nombre de tu preset. Si creas uno nuevo, lo cambias aquí:
-        formData.append('upload_preset', 'ml_default'); 
+        formData.append('upload_preset', 'ml_default1'); 
 
         const res = await fetch('https://api.cloudinary.com/v1_1/qalh60rk/video/upload', {
           method: 'POST',
