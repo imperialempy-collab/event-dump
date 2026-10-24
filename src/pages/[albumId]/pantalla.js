@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { db } from '../../firebase/config';
 import { doc, getDoc, collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 
-// Componente para las estrellitas de fondo (Optimizadas para GPU)
+// Componente para las estrellitas de fondo (Optimizadas para GPU - Se mantiene igual)
 const ParticulasFondo = () => {
   const particles = useMemo(() => Array.from({ length: 40 }).map((_, i) => ({
     id: i,
@@ -15,15 +15,14 @@ const ParticulasFondo = () => {
   })), []);
 
   return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none z-0" style={{ transform: 'translateZ(0)', willChange: 'transform' }}>
+    <div className="absolute inset-0 overflow-hidden pointer-events-none z-0" style={{ transform: 'translateZ(0)' }}>
       {particles.map(p => (
         <div key={p.id} className="absolute bg-white rounded-full shadow-[0_0_8px_rgba(255,255,255,0.8)]"
           style={{
             left: p.left, width: p.size, height: p.size, bottom: '-10px',
             opacity: p.opacity,
             animation: `floatUp ${p.animationDuration} linear infinite`,
-            animationDelay: p.animationDelay,
-            willChange: 'transform, opacity'
+            animationDelay: p.animationDelay
           }}
         />
       ))}
@@ -34,16 +33,6 @@ const ParticulasFondo = () => {
           90% { opacity: 1; }
           100% { transform: translateY(-105vh) scale(1.5); opacity: 0; }
         }
-        @keyframes slideInRight {
-          from { transform: translateX(100%) translateZ(0); }
-          to { transform: translateX(0) translateZ(0); }
-        }
-        @keyframes slideOutLeft {
-          from { transform: translateX(0) translateZ(0); }
-          to { transform: translateX(-100%) translateZ(0); }
-        }
-        .anim-slide-in { animation: slideInRight 0.7s cubic-bezier(0.25, 0.8, 0.25, 1) forwards; }
-        .anim-slide-out { animation: slideOutLeft 0.7s cubic-bezier(0.25, 0.8, 0.25, 1) forwards; }
       `}</style>
     </div>
   );
@@ -56,14 +45,11 @@ export default function PantallaGigante() {
   const [archivos, setArchivos] = useState([]);
   const [cargando, setCargando] = useState(true);
   
-  // Estados de Rendimiento y Lobby
   const [transmisionIniciada, setTransmisionIniciada] = useState(false);
   const [preparandoBuffer, setPreparandoBuffer] = useState(true);
 
   const [colaReproduccion, setColaReproduccion] = useState([]);
   const [currentItem, setCurrentItem] = useState(null);
-  const [prevItem, setPrevItem] = useState(null);
-  const [isAnimating, setIsAnimating] = useState(false);
   
   const [interrupciones, setInterrupciones] = useState([]);
   const [isPaused, setIsPaused] = useState(false);
@@ -90,7 +76,6 @@ export default function PantallaGigante() {
       latestArchivosRef.current = data;
       setCargando(false);
 
-      // Detectar si subieron algo nuevo AHORA (para la interrupción)
       if (prevArchivosLengthRef.current > 0 && data.length > prevArchivosLengthRef.current) {
         const nuevos = data.slice(0, data.length - prevArchivosLengthRef.current);
         setInterrupciones(prev => [...prev, ...nuevos]);
@@ -100,9 +85,11 @@ export default function PantallaGigante() {
     return () => unsubscribe();
   }, [albumId]);
 
-  // 2. Generador de la secuencia (Ranking -> Muro -> Repite)
+  // 2. Generador de la secuencia
   const generarNuevaCola = () => {
     const data = latestArchivosRef.current;
+    if (data.length === 0) return [];
+    
     const ranking = [...data]
       .filter(a => (a.likesArray || []).length > 0)
       .sort((a, b) => b.likesArray.length - a.likesArray.length || (b.creadoEn?.toMillis?.() || 0) - (a.creadoEn?.toMillis?.() || 0));
@@ -111,28 +98,24 @@ export default function PantallaGigante() {
     return [...ranking, ...muro];
   };
 
-  // Inicializar la cola vacía en segundo plano para que el Buffer empiece a chupar datos
+  // Lobby inicial
   useEffect(() => {
     if (archivos.length > 0 && colaReproduccion.length === 0 && !currentItem) {
       setColaReproduccion(generarNuevaCola());
-      
-      // Temporizador del Lobby: da 2.5 seg exactos para precargar en RAM las primeras imágenes
       const t = setTimeout(() => setPreparandoBuffer(false), 2500);
       return () => clearTimeout(t);
     }
   }, [archivos]);
 
-  // 3. Motor de avance (SOLUCIÓN GHOSTING 750ms y Capas)
+  // 3. Motor de avance (CORTE DIRECTO + ESCUDO ANTI-FALLOS)
   const avanzar = () => {
-    let nextItem;
+    let nextItem = null;
     let nuevaCola = [...colaReproduccion];
 
     if (interrupciones.length > 0) {
-      // Prioridad 1: Interrupción (foto nueva)
       nextItem = interrupciones[0];
       setInterrupciones(prev => prev.slice(1));
     } else {
-      // Prioridad 2: Seguir la cola normal
       if (nuevaCola.length === 0) {
         nuevaCola = generarNuevaCola();
       }
@@ -143,20 +126,17 @@ export default function PantallaGigante() {
       }
     }
 
-    if (nextItem) {
-      setPrevItem(currentItem);
-      setCurrentItem(nextItem);
-      setIsAnimating(true);
-      
-      // CORRECCIÓN ANTI-PARPADEO: Damos 750ms a JS (50ms extra de seguridad) 
-      // para asegurar que la animación de CSS (700ms) ya terminó al 100%
-      setTimeout(() => setIsAnimating(false), 750); 
+    // FAIL-SAFE: Si por alguna razón la lógica falló y no hay nextItem, fuerza la última publicación.
+    if (!nextItem && latestArchivosRef.current.length > 0) {
+      nextItem = latestArchivosRef.current[0];
+      setColaReproduccion(generarNuevaCola().slice(1));
     }
+
+    setCurrentItem(nextItem);
   };
 
-  // 4. Temporizador Automático (8 Segundos para imágenes)
+  // 4. Temporizador Automático Normal
   useEffect(() => {
-    // Proteger: Si el operador no ha iniciado la transmisión, el tiempo no corre.
     if (!transmisionIniciada) return;
 
     if (!currentItem && archivos.length > 0) {
@@ -170,14 +150,26 @@ export default function PantallaGigante() {
     return () => clearTimeout(timerRef.current);
   }, [currentItem, isPaused, interrupciones, archivos.length, transmisionIniciada]);
 
-  // Controles del Operador
-  const iniciarTransmisionManual = () => {
-    setAudioHabilitado(true); // El clic del operador destraba la seguridad del navegador para el audio
-    setTransmisionIniciada(true);
+  // 5. NUEVO WATCHDOG (Perro Guardián Anti-Pantalla Vacía)
+  useEffect(() => {
+    if (!transmisionIniciada || isPaused) return;
     
-    if (!document.fullscreenElement) {
-        document.documentElement.requestFullscreen().catch(() => {});
-    }
+    // Revisa cada 5 segundos si la pantalla se quedó trancada sin contenido visible
+    const watchdog = setInterval(() => {
+      if (!currentItem && latestArchivosRef.current.length > 0) {
+        console.warn("Watchdog activado: Forzando recuperación de pantalla.");
+        avanzar();
+      }
+    }, 5000);
+    
+    return () => clearInterval(watchdog);
+  }, [currentItem, transmisionIniciada, isPaused]);
+
+  // Controles
+  const iniciarTransmisionManual = () => {
+    setAudioHabilitado(true);
+    setTransmisionIniciada(true);
+    if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
   };
 
   const reiniciar = () => {
@@ -192,12 +184,12 @@ export default function PantallaGigante() {
     else document.exitFullscreen();
   };
 
-  // Determinar los siguientes elementos a cargar en RAM oculta (El Buffer Invisible)
+  // Buffer Optimizado: Reducido a solo 2 elementos para no fundir la VRAM de la TV
   const itemsParaPrecargar = useMemo(() => {
     const lista = [];
     if (interrupciones.length > 0) lista.push(...interrupciones);
-    if (colaReproduccion.length > 0) lista.push(...colaReproduccion.slice(0, 4)); // Precarga las próximas 4
-    return lista.filter((item, index, self) => index === self.findIndex((t) => t.id === item.id)); // Elimina duplicados
+    if (colaReproduccion.length > 0) lista.push(...colaReproduccion.slice(0, 2));
+    return lista.filter((item, index, self) => index === self.findIndex((t) => t.id === item.id)); 
   }, [interrupciones, colaReproduccion]);
 
   if (cargando) return <div className="min-h-screen bg-black flex items-center justify-center text-white/50 text-2xl tracking-widest uppercase">Conectando...</div>;
@@ -209,7 +201,7 @@ export default function PantallaGigante() {
       onMouseMove={() => { setShowControls(true); clearTimeout(window.controlsTimeout); window.controlsTimeout = setTimeout(() => setShowControls(false), 3000); }}
     >
       
-      {/* EL BUFFER INVISIBLE (Descarga a memoria RAM en la TV sin mostrarlo) */}
+      {/* EL BUFFER INVISIBLE (Reducido a max 2 elementos para TV) */}
       <div style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 0, height: 0, overflow: 'hidden', zIndex: -100 }}>
         {itemsParaPrecargar.map(item => (
           item.tipo === 'video' ? (
@@ -220,7 +212,7 @@ export default function PantallaGigante() {
         ))}
       </div>
 
-      {/* --- LOBBY DE ESPERA (Antes de Iniciar) --- */}
+      {/* --- LOBBY DE ESPERA --- */}
       {!transmisionIniciada && (
         <div className="absolute inset-0 z-[200] flex flex-col items-center justify-center bg-zinc-900 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-zinc-800 to-black text-white">
             <h1 className="text-5xl font-black mb-10 tracking-widest uppercase text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500 drop-shadow-2xl">
@@ -250,41 +242,24 @@ export default function PantallaGigante() {
         </div>
       )}
 
-      {/* --- PANTALLA EN VIVO (Fondo Negro + Aceleración Gráfica) --- */}
+      {/* --- PANTALLA EN VIVO (Corte Directo, Sin Traslados) --- */}
       {transmisionIniciada && (
         <>
-          {/* El fondo negro viene del contenedor principal (bg-black). Ya no hay capa difuminada pesada. */}
-
-          {/* CAPA 1: Partículas (Estrellitas) */}
           <ParticulasFondo />
 
-          {/* CAPA 2: Contenedor de Medios con Animación de Arrastre */}
+          {/* CAPA 2: Contenedor de Medios (Solamente muestra el actual al instante) */}
           <div className="absolute inset-0 w-full h-full">
-            
-            {/* Item Anterior (Saliendo) - Z-index 10, Key única, translateZ para GPU */}
-            {prevItem && isAnimating && (
-              <div key={`prev-${prevItem.id}`} className="absolute inset-0 w-full h-full flex items-center justify-center anim-slide-out p-12 z-10" style={{ transform: 'translateZ(0)', willChange: 'transform' }}>
-                {prevItem.tipo === 'video' ? (
-                  <video src={prevItem.url} className="w-full h-full object-contain drop-shadow-2xl rounded-3xl" />
-                ) : (
-                  <img src={prevItem.url} className="w-full h-full object-contain drop-shadow-2xl rounded-3xl" />
-                )}
-              </div>
-            )}
-
-            {/* Item Actual (Entrando / Estático) - Z-index 20 (encima siempre), Key única */}
             {currentItem && (
-              <div key={`curr-${currentItem.id}`} className={`absolute inset-0 w-full h-full flex items-center justify-center p-12 z-20 ${isAnimating ? 'anim-slide-in' : ''}`} style={{ transform: 'translateZ(0)', willChange: 'transform' }}>
+              <div key={`curr-${currentItem.id}`} className="absolute inset-0 w-full h-full flex items-center justify-center p-12 z-20" style={{ transform: 'translateZ(0)' }}>
                 
-                <div className="relative w-full h-full flex items-center justify-center">
+                <div className="relative w-full h-full flex items-center justify-center animate-fade-in">
                   {currentItem.tipo === 'video' ? (
                     <video src={currentItem.url} autoPlay muted={!audioHabilitado} playsInline onEnded={avanzar} className="w-full h-full object-contain drop-shadow-[0_20px_50px_rgba(0,0,0,0.7)] rounded-3xl border border-white/10" />
                   ) : (
                     <img src={currentItem.url} className="w-full h-full object-contain drop-shadow-[0_20px_50px_rgba(0,0,0,0.7)] rounded-3xl border border-white/10" />
                   )}
 
-                  {/* Indicadores Minimalistas (Likes y Comentarios) */}
-                  <div className="absolute bottom-6 right-6 flex items-center gap-4 bg-black/40 backdrop-blur-xl px-6 py-3 rounded-full border border-white/10 shadow-2xl" style={{ transform: 'translateZ(0)' }}>
+                  <div className="absolute bottom-6 right-6 flex items-center gap-4 bg-black/40 backdrop-blur-xl px-6 py-3 rounded-full border border-white/10 shadow-2xl">
                     {(currentItem.comentarios || []).length > 0 && (
                       <div className="flex items-center gap-2">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-7 h-7 text-white/90"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
@@ -309,7 +284,7 @@ export default function PantallaGigante() {
             )}
           </div>
 
-          {/* CAPA 3: Controles del Operador (Ocultos al no mover el mouse) */}
+          {/* CAPA 3: Controles del Operador */}
           <div className={`absolute bottom-10 left-10 z-50 flex gap-4 transition-opacity duration-500 ${showControls ? 'opacity-100' : 'opacity-0'}`}>
             <button onClick={() => setIsPaused(!isPaused)} className="w-16 h-16 bg-white/10 backdrop-blur-lg border border-white/20 rounded-full flex items-center justify-center text-white hover:bg-white/20 transition shadow-xl" title={isPaused ? "Reanudar" : "Pausar"}>
               {isPaused ? <span className="text-3xl pl-1">▶</span> : <span className="text-3xl font-black">II</span>}
