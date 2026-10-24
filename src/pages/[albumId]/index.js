@@ -65,7 +65,24 @@ export default function MuroEvento() {
       try {
         const docRef = doc(db, 'albums', albumId);
         const unsubscribe = onSnapshot(docRef, (docSnap) => {
-           if (docSnap.exists()) setAlbum(docSnap.data());
+           if (docSnap.exists()) {
+             const data = docSnap.data();
+             setAlbum(data);
+             
+             // NUEVO: Guardar en el historial del celular del invitado
+             try {
+               const visited = JSON.parse(localStorage.getItem('visitedAlbums') || '[]');
+               const filtered = visited.filter(a => a.id !== albumId); // Quitar duplicado si ya existía
+               filtered.unshift({
+                 id: albumId,
+                 nombreEvento: data.nombreEvento,
+                 fechaEvento: data.fechaEvento,
+                 portadaUrl: data.portadaUrl || null
+               });
+               // Guardar un máximo de 10 fiestas recientes
+               localStorage.setItem('visitedAlbums', JSON.stringify(filtered.slice(0, 10)));
+             } catch (e) { console.log(e); }
+           }
            setCargando(false);
         });
         return () => unsubscribe();
@@ -938,7 +955,7 @@ export default function MuroEvento() {
         <div className="flex items-center justify-between px-6">
           <button onClick={() => router.push('/')} className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-50 text-gray-600">←</button>
           <div className="flex flex-col items-center flex-1 px-2 overflow-hidden">
-            <h1 className="text-xl font-serif text-black truncate w-full text-center">{album.nombreEvento}</h1>
+            <h1 className="text-xl font-serif text-black truncate w-full text-center notranslate" translate="no">{album.nombreEvento}</h1>
             <p className="text-[10px] text-gray-400 uppercase tracking-widest mt-1 font-medium">{album.fechaEvento}</p>
           </div>
           <button onClick={() => setMenuAbierto(true)} className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-50 text-gray-600 pb-2 text-2xl">⋮</button>
