@@ -135,7 +135,7 @@ export default function PantallaGigante() {
     setCurrentItem(nextItem);
   };
 
-  // 4. Temporizador Automático Normal
+  // 4. Temporizador Automático Normal (Con Escudo Anti-Cuelgues)
   useEffect(() => {
     if (!transmisionIniciada) return;
 
@@ -144,12 +144,15 @@ export default function PantallaGigante() {
       return;
     }
 
-    if (isPaused || !currentItem || currentItem.tipo === 'video') return;
+    if (isPaused || !currentItem) return;
     
-    timerRef.current = setTimeout(() => { avanzar(); }, 8000);
+    // Si es foto, 8 segundos. Si es video, le damos 45 segundos MÁXIMO por si falla el 'onEnded'.
+    const tiempoLimite = currentItem.tipo === 'video' ? 45000 : 8000;
+    
+    timerRef.current = setTimeout(() => { avanzar(); }, tiempoLimite);
     return () => clearTimeout(timerRef.current);
   }, [currentItem, isPaused, interrupciones, archivos.length, transmisionIniciada]);
-
+  
   // 5. NUEVO WATCHDOG (Perro Guardián Anti-Pantalla Vacía)
   useEffect(() => {
     if (!transmisionIniciada || isPaused) return;
@@ -253,10 +256,10 @@ export default function PantallaGigante() {
               <div key={`curr-${currentItem.id}`} className="absolute inset-0 w-full h-full flex items-center justify-center p-12 z-20" style={{ transform: 'translateZ(0)' }}>
                 
                 <div className="relative w-full h-full flex items-center justify-center animate-fade-in">
-                  {currentItem.tipo === 'video' ? (
-                    <video src={currentItem.url} autoPlay muted={!audioHabilitado} playsInline onEnded={avanzar} className="w-full h-full object-contain drop-shadow-[0_20px_50px_rgba(0,0,0,0.7)] rounded-3xl border border-white/10" />
+                   {currentItem.tipo === 'video' ? (
+                    <video src={currentItem.url} autoPlay muted={!audioHabilitado} playsInline onEnded={avanzar} onError={avanzar} className="w-full h-full object-contain drop-shadow-[0_20px_50px_rgba(0,0,0,0.7)] rounded-3xl border border-white/10" />
                   ) : (
-                    <img src={currentItem.url} className="w-full h-full object-contain drop-shadow-[0_20px_50px_rgba(0,0,0,0.7)] rounded-3xl border border-white/10" />
+				  <img src={currentItem.url} className="w-full h-full object-contain drop-shadow-[0_20px_50px_rgba(0,0,0,0.7)] rounded-3xl border border-white/10" />
                   )}
 
                   <div className="absolute bottom-6 right-6 flex items-center gap-4 bg-black/40 backdrop-blur-xl px-6 py-3 rounded-full border border-white/10 shadow-2xl">

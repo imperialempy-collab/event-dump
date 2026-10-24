@@ -889,10 +889,11 @@ export default function MuroEvento() {
               return (
                 <button key={item.id} onClick={() => abrirHistoria(index)} className={`flex-shrink-0 relative rounded-[16px] p-[2px] transition-all transform hover:scale-95 ${visto ? 'bg-gray-200' : 'bg-gradient-to-tr from-blue-500 to-purple-500'}`}>
                   <div className="w-14 h-20 bg-black rounded-[14px] overflow-hidden border-[2px] border-white relative flex items-center justify-center">
-                    {item.tipo === 'video' ? (
-                      <video src={item.url} className={`w-full h-full object-cover transition-opacity duration-300 ${visto ? 'opacity-50' : 'opacity-90'}`} />
-                    ) : (
-                      <img src={item.url} className={`w-full h-full object-cover transition-opacity duration-300 ${visto ? 'opacity-50' : 'opacity-90'}`} />
+                    
+{item.tipo === 'video' ? (
+                    <video src={`${item.url}#t=0.001`} preload="metadata" muted playsInline className="w-full h-full object-cover" />
+                  ) : (
+					<img src={item.url} className={`w-full h-full object-cover transition-opacity duration-300 ${visto ? 'opacity-50' : 'opacity-90'}`} />
                     )}
                     
                     <span className="absolute top-1 left-1 bg-black/70 text-white px-1.5 py-0.5 rounded-md text-[9px] font-black tracking-widest shadow-md">
