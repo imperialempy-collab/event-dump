@@ -70,18 +70,26 @@ export default function Home() {
           </h2>
         </div>
 
-        {/* Tarjeta: Crear Álbum (con la nueva imagen fotitos_portada.png) */}
+        {/* TARJETA REDISEÑADA: Crear Álbum (Imagen Gigante Borde a Borde) */}
         <button 
           onClick={handleCrearAlbum}
           disabled={cargando}
-          className="w-full bg-white rounded-[2rem] p-8 shadow-sm border border-gray-100 flex flex-col items-center gap-3 mb-6 hover:shadow-md transition transform hover:-translate-y-1"
+          className="w-full bg-white rounded-[2rem] overflow-hidden shadow-sm border border-gray-100 flex flex-col items-center mb-6 hover:shadow-md transition transform hover:-translate-y-1"
         >
-          <div className="w-20 h-20 mb-2 flex items-center justify-center">
-            {/* Buscamos la imagen en la carpeta public */}
-            <img src="/fotitos_portada.png" alt="Crear Evento" className="w-full h-full object-contain" />
+          {/* Contenedor de la imagen sin padding lateral, ocupando 100% */}
+          <div className="w-full flex items-center justify-center pt-8 bg-gray-50/50">
+            <img 
+              src="/fotitos_portada.png" 
+              alt="Crear Evento" 
+              className="w-full h-auto object-cover transform scale-110 drop-shadow-sm" 
+            />
           </div>
-          <h2 className="text-xl font-bold">Crear álbum de evento</h2>
-          <p className="text-gray-400 text-sm">Bodas, cumpleaños, viajes...</p>
+          
+          {/* Textos abajo con su propio padding */}
+          <div className="p-8 pt-6 pb-10 flex flex-col items-center w-full relative z-10 bg-white">
+            <h2 className="text-2xl font-bold text-gray-900">Crear álbum de evento</h2>
+            <p className="text-gray-400 text-sm mt-2">Bodas, cumpleaños, viajes...</p>
+          </div>
         </button>
 
         {/* Tarjeta: Información (Misterio puro) */}
@@ -113,7 +121,6 @@ export default function Home() {
                     )}
                   </div>
                   <div className="flex-1 text-left overflow-hidden">
-                    {/* AQUI ESTÁ EL CANDADO DE TRADUCCIÓN PARA LA LISTA */}
                     <h4 className="font-bold text-gray-800 truncate notranslate" translate="no">{album.nombreEvento}</h4>
                     <p className="text-xs text-gray-400 mt-1">{album.fechaEvento}</p>
                   </div>

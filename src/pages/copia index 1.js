@@ -11,21 +11,33 @@ export default function Home() {
   const [misAlbumes, setMisAlbumes] = useState([]);
 
   useEffect(() => {
+    // 1. Leer los álbumes que el celular visitó recientemente
+    const localAlbums = JSON.parse(localStorage.getItem('visitedAlbums') || '[]');
+
     if (usuario) {
       const cargarAlbumes = async () => {
         try {
           const q = query(collection(db, 'albums'), where('adminId', '==', usuario.uid));
           const querySnapshot = await getDocs(q);
-          const albumes = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-          albumes.sort((a, b) => b.creadoEn?.toMillis() - a.creadoEn?.toMillis());
-          setMisAlbumes(albumes);
+          const albumesAdmin = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          albumesAdmin.sort((a, b) => (b.creadoEn?.toMillis() || 0) - (a.creadoEn?.toMillis() || 0));
+
+          // Juntar los álbumes propios con los visitados como invitado (sin duplicar)
+          const combinados = [...albumesAdmin];
+          localAlbums.forEach(local => {
+            if (!combinados.find(a => a.id === local.id)) {
+              combinados.push(local);
+            }
+          });
+          setMisAlbumes(combinados);
         } catch(error) {
           console.error("Error al cargar álbumes", error);
         }
       }
       cargarAlbumes();
     } else {
-      setMisAlbumes([]);
+      // Si no ha iniciado sesión, solo le mostramos los que visitó
+      setMisAlbumes(localAlbums);
     }
   }, [usuario]);
 
@@ -80,11 +92,11 @@ export default function Home() {
           <div className="text-6xl font-serif text-blue-600">¿?</div>
         </button>
 
-        {/* Sección: Mis Álbumes */}
-        {usuario && misAlbumes.length > 0 && (
+        {/* Sección: Mis Álbumes o Álbumes Visitados */}
+        {misAlbumes.length > 0 && (
           <div className="w-full mt-10 animate-fade-in pb-10">
             <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4 px-2">
-              Mis Álbumes
+              {usuario ? 'Mis Álbumes y Visitados' : 'Álbumes Visitados'}
             </h3>
             <div className="space-y-3">
               {misAlbumes.map(album => (
@@ -101,7 +113,8 @@ export default function Home() {
                     )}
                   </div>
                   <div className="flex-1 text-left overflow-hidden">
-                    <h4 className="font-bold text-gray-800 truncate">{album.nombreEvento}</h4>
+                    {/* AQUI ESTÁ EL CANDADO DE TRADUCCIÓN PARA LA LISTA */}
+                    <h4 className="font-bold text-gray-800 truncate notranslate" translate="no">{album.nombreEvento}</h4>
                     <p className="text-xs text-gray-400 mt-1">{album.fechaEvento}</p>
                   </div>
                   <div className="text-gray-300 text-xl flex-shrink-0">→</div>
