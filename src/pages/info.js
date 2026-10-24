@@ -46,6 +46,8 @@ export default function QueEsEventDump() {
       <Head>
         <title>¿Qué es Event-Dump?</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+        {/* Etiqueta para bloquear el traductor de Google */}
+        <meta name="google" content="notranslate" />
         <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,900&family=Manrope:wght@400;600;800&family=Caveat:wght@600&display=swap" rel="stylesheet" />
       </Head>
 
@@ -105,7 +107,8 @@ export default function QueEsEventDump() {
         @media (prefers-reduced-motion:reduce){.event-dump-info-page .stack .pol{animation:none}}
       `}} />
 
-      <div className="event-dump-info-page" ref={containerRef}>
+      {/* Candados adicionales: translate="no" y className="notranslate" */}
+      <div className="event-dump-info-page notranslate" translate="no" ref={containerRef}>
         
         {/* Botón flotante para regresar a Home */}
         <button onClick={() => router.push('/')} className="btn-back">
@@ -164,7 +167,7 @@ export default function QueEsEventDump() {
           <div className="strip">
             <div className="pol"><div data-s="cake"></div><span>cumple, 12 velas</span></div>
             <div className="pol"><div data-s="lights"></div><span>la boda, a la noche</span></div>
-            <div class="pol"><div data-s="trip"></div><span>viaje, ruta 40</span></div>
+            <div className="pol"><div data-s="trip"></div><span>viaje, ruta 40</span></div>
             <div className="pol"><div data-s="dance"></div><span>la pista, 3 am</span></div>
             <div className="pol"><div data-s="toast"></div><span>el brindis</span></div>
           </div>
