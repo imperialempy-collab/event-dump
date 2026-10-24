@@ -219,6 +219,7 @@ export default function MuroEvento() {
     closeModal();
   };
 
+ 
  const publicarArchivo = async () => {
     if (!archivoEditando) return;
     setSubiendo(true);
@@ -226,28 +227,28 @@ export default function MuroEvento() {
       let urlDescarga = '';
 
       if (archivoEditando.tipo === 'video') {
-        // --- NUEVO: RUTA CLOUDINARY PARA VIDEOS ---
         const formData = new FormData();
         formData.append('file', archivoEditando.file);
-        formData.append('upload_preset', 'ml_default');
-        formData.append('cloud_name', 'qalh60rk'); // Tu cuenta
+        
+        // Aquí va el nombre de tu preset. Si creas uno nuevo, lo cambias aquí:
+        formData.append('upload_preset', 'ml_default'); 
 
-        // Hacemos la petición directa a la API de Cloudinary sin pasar por Firebase Storage
         const res = await fetch('https://api.cloudinary.com/v1_1/qalh60rk/video/upload', {
           method: 'POST',
           body: formData
         });
 
-        if (!res.ok) throw new Error('Error al subir el video a Cloudinary');
+        // NUEVO: Si Cloudinary rechaza el video, capturamos su excusa exacta
+        if (!res.ok) {
+          const errorData = await res.json();
+          throw new Error("Cloudinary falló: " + (errorData.error?.message || "Error desconocido"));
+        }
+        
         const data = await res.json();
-
-        // Magia: Le inyectamos "q_auto,vc_auto" al link para que Cloudinary 
-        // comprima y adapte el video para TVs y navegadores al instante.
         const partes = data.secure_url.split('/upload/');
         urlDescarga = partes[0] + '/upload/q_auto,vc_auto/' + partes[1];
 
       } else {
-        // --- RUTA CLÁSICA FIREBASE PARA FOTOS (Se mantiene igual) ---
         const archivoFinal = await comprimirImagen(archivoEditando.file);
         const extension = archivoFinal.name.split('.').pop() || 'jpg';
         const nombreArchivo = `${Date.now()}-${Math.random().toString(36).substring(2)}.${extension}`;
@@ -257,7 +258,6 @@ export default function MuroEvento() {
         urlDescarga = await getDownloadURL(ruta);
       }
 
-      // --- GUARDAR EN FIRESTORE (Se mantiene igual para ambos) ---
       const comentariosIniciales = archivoEditando.comentario.trim() ? [{
         id: Date.now().toString(),
         texto: archivoEditando.comentario.trim(),
@@ -282,11 +282,13 @@ export default function MuroEvento() {
       closeModal();
     } catch (error) {
       console.error(error);
-      alert("Error al subir el archivo.");
+      // NUEVO: Ahora la alerta nos dirá el error exacto en la pantalla del celular
+      alert(error.message);
     } finally {
       setSubiendo(false);
     }
   };
+ 
 
   const comprimirImagen = (file) => {
     return new Promise((resolve) => {
