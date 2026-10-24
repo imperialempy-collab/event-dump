@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { RETOS_POR_DEFECTO } from '../constants/retosBase';
 
 export default function SorteoReto({ album, onClose }) {
@@ -9,19 +9,6 @@ export default function SorteoReto({ album, onClose }) {
   // Obtener la lista de retos (los del álbum, o los por defecto si es un álbum viejo)
   const listaRetos = album?.listaRetos?.length > 0 ? album.listaRetos : RETOS_POR_DEFECTO;
   const retosActivos = listaRetos.filter(r => r.activo !== false); // Por si luego el dueño desactiva algunos
-
-  // Generador de la lluvia (20 palabras flotando)
-  const lluvia = useMemo(() => {
-    return Array.from({ length: 25 }).map((_, i) => ({
-      id: i,
-      texto: retosActivos[Math.floor(Math.random() * retosActivos.length)].texto,
-      left: `${Math.random() * 100}%`,
-      delay: `${Math.random() * 1}s`,
-      duration: `${1.5 + Math.random() * 1.5}s`,
-      size: `${14 + Math.random() * 14}px`,
-      opacity: 0.1 + Math.random() * 0.3
-    }));
-  }, [retosActivos]);
 
   const iniciarSorteo = () => {
     setPaso('animando');
@@ -58,25 +45,9 @@ export default function SorteoReto({ album, onClose }) {
         </button>
       )}
 
-      {/* FASE 1: ANIMACIÓN DE LLUVIA Y CONTADOR */}
+      {/* FASE 1: ANIMACIÓN DE CONTADOR LIMPIO */}
       {paso === 'animando' && (
         <>
-          {/* Lluvia de palabras (GPU Acelerada) */}
-          <div className="absolute inset-0 pointer-events-none" style={{ transform: 'translateZ(0)' }}>
-            {lluvia.map(gota => (
-              <div 
-                key={gota.id} 
-                className="absolute text-white font-bold whitespace-nowrap anim-lluvia"
-                style={{
-                  left: gota.left, top: '-50px', fontSize: gota.size, opacity: gota.opacity,
-                  animationDuration: gota.duration, animationDelay: gota.delay
-                }}
-              >
-                {gota.texto}
-              </div>
-            ))}
-          </div>
-
           {/* Contador Gigante */}
           <div className="relative z-10 flex items-center justify-center">
             <span key={contador} className="text-[150px] font-black text-transparent bg-clip-text bg-gradient-to-b from-blue-400 to-purple-600 animate-pulse-fast drop-shadow-[0_0_40px_rgba(59,130,246,0.8)]">
@@ -85,13 +56,6 @@ export default function SorteoReto({ album, onClose }) {
           </div>
 
           <style>{`
-            @keyframes caer {
-              0% { transform: translateY(-10vh) translateZ(0); opacity: 0; }
-              10% { opacity: var(--op); }
-              90% { opacity: var(--op); }
-              100% { transform: translateY(110vh) translateZ(0); opacity: 0; }
-            }
-            .anim-lluvia { animation: caer linear infinite; }
             .animate-pulse-fast { animation: pulse 0.5s cubic-bezier(0.4, 0, 0.6, 1) infinite alternate; }
             @keyframes pulse { 0% { transform: scale(1); } 100% { transform: scale(1.15); } }
           `}</style>
@@ -126,19 +90,27 @@ export default function SorteoReto({ album, onClose }) {
         </div>
       )}
 
-      {/* FASE 3: MODO AMPLIADO (Cartel para Foto) */}
+      {/* FASE 3: MODO AMPLIADO (Cartel Horizontal para Foto) */}
       {paso === 'ampliado' && (
-        <div className="absolute inset-0 bg-white z-[400] flex items-center justify-center p-6 animate-fade-in" onClick={() => setPaso('resultado')}>
-          
-          <div className="absolute top-6 left-1/2 -translate-x-1/2 flex flex-col items-center opacity-30">
-             <span className="text-black text-xs font-bold uppercase tracking-widest mb-1">Toque para salir</span>
-             <svg className="w-5 h-5 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-          </div>
+        <div 
+          className="absolute inset-0 bg-white z-[400] flex items-center justify-center overflow-hidden animate-fade-in" 
+          onClick={() => setPaso('resultado')}
+        >
+          {/* El contenedor usa dimensiones de pantalla cruzadas (vh por vw) y rota 90deg en retrato, y queda normal en apaisado */}
+          <div className="relative flex flex-col items-center justify-center w-[100vh] h-[100vw] rotate-90 landscape:w-full landscape:h-full landscape:rotate-0 p-10">
+            
+            <div className="absolute top-6 flex flex-col items-center opacity-30">
+               <span className="text-black text-xs font-bold uppercase tracking-widest mb-1">Toque para salir</span>
+               <svg className="w-5 h-5 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
+               </svg>
+            </div>
 
-          <h1 className="text-5xl sm:text-7xl lg:text-8xl font-black text-black text-center uppercase tracking-tighter leading-[1.1] break-words">
-            {retoGanador?.texto}
-          </h1>
-          
+            <h1 className="text-6xl sm:text-7xl md:text-8xl lg:text-9xl font-black text-black text-center uppercase tracking-tighter leading-[1.1] break-words drop-shadow-sm">
+              {retoGanador?.texto}
+            </h1>
+            
+          </div>
         </div>
       )}
 
