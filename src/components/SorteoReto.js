@@ -47,7 +47,6 @@ export default function SorteoReto({ album, onClose }) {
       textEl.style.fontSize = `${fontSize}px`;
 
       // 2. Bucle inteligente: Mientras el texto se salga de los bordes del contenedor...
-      // (scrollHeight = altura real del texto, clientHeight = espacio disponible)
       while (
         (textEl.scrollHeight > containerEl.clientHeight || textEl.scrollWidth > containerEl.clientWidth) 
         && fontSize > 20 // Límite mínimo para que no desaparezca
@@ -89,7 +88,8 @@ export default function SorteoReto({ album, onClose }) {
             ¡Tu Reto es!
           </p>
           
-          <h2 className="text-4xl md:text-5xl text-white font-black text-center mb-14 drop-shadow-2xl leading-tight">
+          {/* AQUI ESTÁ EL CANDADO ANTI-TRADUCCIÓN PARA EL TEXTO DEL RETO */}
+          <h2 className="text-4xl md:text-5xl text-white font-black text-center mb-14 drop-shadow-2xl leading-tight notranslate" translate="no">
             {retoGanador?.texto}
           </h2>
           
@@ -98,13 +98,13 @@ export default function SorteoReto({ album, onClose }) {
               onClick={iniciarSorteo} 
               className="flex-1 bg-white/5 border border-white/10 text-white py-4 rounded-2xl font-bold text-sm tracking-widest uppercase hover:bg-white/10 transition active:scale-95"
             >
-              🔄 Otro
+              Otro reto
             </button>
             <button 
               onClick={() => setPaso('ampliado')} 
               className="flex-1 bg-gradient-to-r from-blue-600 to-purple-600 text-white py-4 rounded-2xl font-bold text-sm tracking-widest uppercase shadow-[0_0_30px_rgba(37,99,235,0.4)] hover:scale-105 transition active:scale-95"
             >
-              🔲 Ampliar
+              Ampliar
             </button>
           </div>
         </div>
@@ -128,9 +128,11 @@ export default function SorteoReto({ album, onClose }) {
 
             {/* Este div es la 'Caja' que define los bordes invisibles */}
             <div ref={containerRef} className="w-full h-full max-h-[80%] flex items-center justify-center mt-6">
+              {/* AQUI ESTÁ EL CANDADO ANTI-TRADUCCIÓN PARA EL MODO AMPLIADO */}
               <h1 
                 ref={textRef} 
-                className="font-black text-black text-center uppercase tracking-tighter leading-tight w-full break-words"
+                className="font-black text-black text-center uppercase tracking-tighter leading-tight w-full break-words notranslate" 
+                translate="no"
               >
                 {retoGanador?.texto}
               </h1>
