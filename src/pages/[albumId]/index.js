@@ -1,13 +1,15 @@
 import { useRouter } from 'next/router';
 import { useState, useEffect, useRef } from 'react';
 import { db, storage } from '../../firebase/config';
-import { doc, getDoc, collection, addDoc, onSnapshot, query, orderBy, updateDoc, increment, arrayUnion, arrayRemove, deleteDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, addDoc, onSnapshot, query, orderBy, updateDoc, arrayUnion, arrayRemove, deleteDoc } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useAuthContext } from '../../context/AuthContext';
 import SorteoReto from '../../components/SorteoReto';
+import { RETOS_POR_DEFECTO } from '../../constants/retosBase'; // Asegúrate de tener esta constante
 
 export default function MuroEvento() {
   const [mostrarSorteo, setMostrarSorteo] = useState(false);
+  const [mostrarGestorRetos, setMostrarGestorRetos] = useState(false); // Modal Gestor
   const router = useRouter();
   const { albumId } = router.query;
   const { usuario, loginConGoogle, cerrarSesion } = useAuthContext();
@@ -42,6 +44,9 @@ export default function MuroEvento() {
   const [columnasMuro, setColumnasMuro] = useState(2);
   const pinchStartDistRef = useRef(null);
 
+  // Estados para el Gestor de Retos
+  const [nuevoRetoTexto, setNuevoRetoTexto] = useState('');
+
   const usuarioId = usuario ? usuario.uid : 'anonimo_' + (typeof window !== 'undefined' ? (localStorage.getItem('anon_id') || (() => {
     const id = Math.random().toString(36).substring(2);
     localStorage.setItem('anon_id', id);
@@ -49,17 +54,21 @@ export default function MuroEvento() {
   })()) : 'guest');
 
   const usuarioNombre = usuario ? (usuario.displayName || usuario.email || 'Usuario') : 'Invitado';
-  
   const esAnonimo = !usuario;
+
+  // Validación de seguridad (El candado)
+  const esAdmin = album && usuario && album.adminId === usuario.uid;
 
   useEffect(() => {
     if (!albumId) return;
     const cargarDatos = async () => {
       try {
         const docRef = doc(db, 'albums', albumId);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) setAlbum(docSnap.data());
-        setCargando(false);
+        const unsubscribe = onSnapshot(docRef, (docSnap) => {
+           if (docSnap.exists()) setAlbum(docSnap.data());
+           setCargando(false);
+        });
+        return () => unsubscribe();
       } catch (error) { console.error(error); setCargando(false); }
     };
     cargarDatos();
@@ -97,6 +106,7 @@ export default function MuroEvento() {
         setArchivoEditando(null);
         setPanelInteractivoAbierto(false);
         setMenuAbierto(false);
+        setMostrarGestorRetos(false);
       }
     };
     window.addEventListener('hashchange', handleHashChange);
@@ -113,17 +123,15 @@ export default function MuroEvento() {
 
   const getTime = (item) => item.creadoEn?.toMillis ? item.creadoEn.toMillis() : (item.creadoEn ? new Date(item.creadoEn).getTime() : 0);
 
-  // Todo va al muro ahora
   const itemsMuro = archivos;
   
-  // RANKING: Todas las publicaciones con Me gusta
   const topRanking = [...itemsMuro]
-    .filter(a => (a.likesArray || []).length > 0) // Debe tener al menos 1 like para entrar al ranking
+    .filter(a => (a.likesArray || []).length > 0) 
     .sort((a, b) => {
       const likesA = (a.likesArray || []).length;
       const likesB = (b.likesArray || []).length;
-      if (likesB !== likesA) return likesB - likesA; // Ordenar por likes
-      return getTime(b) - getTime(a); // Desempate: el más reciente primero
+      if (likesB !== likesA) return likesB - likesA; 
+      return getTime(b) - getTime(a); 
     });
 
   const handlePinchStart = (e) => {
@@ -214,7 +222,7 @@ export default function MuroEvento() {
       await addDoc(collection(db, 'albums', albumId, 'fotos'), {
         url: urlDescarga,
         tipo: archivoEditando.tipo,
-        destino: 'muro', // Todo va al muro
+        destino: 'muro',
         likesArray: [],
         likesData: [],
         comentarios: comentariosIniciales,
@@ -315,7 +323,6 @@ export default function MuroEvento() {
     e.preventDefault();
     if (!nuevoComentarioTexto.trim()) return;
 
-    // Detectamos si el usuario está viendo el Muro o las Historias para enviar al elemento correcto
     let itemActual = null;
     if (visorHistorias !== null) {
       itemActual = visorHistorias.lista[visorHistorias.currentIndex];
@@ -345,7 +352,6 @@ export default function MuroEvento() {
     }
   }, [itemActivoIndex]);
 
-  // Pausar video de historia si se abre el panel de comentarios
   useEffect(() => {
     if (visorHistorias !== null) {
       const video = document.getElementById('video-historia');
@@ -377,19 +383,15 @@ export default function MuroEvento() {
   };
   
   const manejarTiempoHistoria = (e) => {
-      // Solo avanza si el panel de comentarios NO está abierto
       if (e.target.currentTime >= 10 && !panelInteractivoAbierto) avanzarHistoria();
   };
 
   const avanzarHistoria = (e) => { 
     if (e) e.stopPropagation(); 
-    
-    // Si el panel de comentarios está abierto, un clic lateral solo lo cierra
     if (panelInteractivoAbierto) {
       setPanelInteractivoAbierto(false);
       return;
     }
-
     setVisorHistorias(prev => {
       if (!prev) return null;
       if (prev.currentIndex < prev.lista.length - 1) {
@@ -405,13 +407,10 @@ export default function MuroEvento() {
 
   const retrocederHistoria = (e) => { 
     if (e) e.stopPropagation(); 
-    
-    // Si el panel de comentarios está abierto, un clic lateral solo lo cierra
     if (panelInteractivoAbierto) {
       setPanelInteractivoAbierto(false);
       return;
     }
-
     if (visorHistorias.currentIndex > 0) { 
         setVisorHistorias({ ...visorHistorias, currentIndex: visorHistorias.currentIndex - 1 }); 
         setVideoProgreso(0); 
@@ -432,17 +431,15 @@ export default function MuroEvento() {
       manejarTiempoHistoria(e);
   };
 
-  // Efecto para animar el progreso si es imagen en el visor de historias
   useEffect(() => {
     let interval;
-    // Solo avanza la barra de la foto si el panel NO está abierto
     if (visorHistorias && !panelInteractivoAbierto) {
         const itemActivo = visorHistorias.lista[visorHistorias.currentIndex];
         if (itemActivo && itemActivo.tipo !== 'video') {
             interval = setInterval(() => {
                 setVideoProgreso(prev => {
                     if (prev >= 100) return 100;
-                    return prev + 2; // Llena la barra en 5 segundos (2% cada 100ms)
+                    return prev + 2; 
                 });
             }, 100);
         }
@@ -450,7 +447,6 @@ export default function MuroEvento() {
     return () => clearInterval(interval);
   }, [visorHistorias?.currentIndex, panelInteractivoAbierto]);
 
-  // Avanzar automáticamente cuando la barra llega a 100 en imágenes
   useEffect(() => {
     if (visorHistorias && videoProgreso >= 100 && !panelInteractivoAbierto) {
         const itemActivo = visorHistorias.lista[visorHistorias.currentIndex];
@@ -471,7 +467,7 @@ export default function MuroEvento() {
 
     try {
       await deleteDoc(doc(db, 'albums', albumId, 'fotos', item.id));
-      cerrarItemMuro(); // Cierra el visor automáticamente tras borrar
+      cerrarItemMuro();
     } catch (error) {
       console.error("Error al borrar:", error);
       alert("Hubo un error al borrar la publicación.");
@@ -561,8 +557,6 @@ export default function MuroEvento() {
 
   const compartirTransmision = () => {
     const urlPantalla = `${window.location.origin}/${albumId}/pantalla`;
-    
-    // Si el celular soporta el menú nativo de compartir (como WhatsApp, etc.)
     if (navigator.share) {
       navigator.share({
         title: 'Transmisión en Vivo - ' + (album?.nombreEvento || 'Evento'),
@@ -570,11 +564,56 @@ export default function MuroEvento() {
         url: urlPantalla,
       }).catch(() => {});
     } else {
-      // Si está en una PC o no soporta compartir nativo, lo copia
       navigator.clipboard.writeText(urlPantalla);
       alert('¡Link de transmisión copiado!\nEnvíalo a la computadora de la pantalla gigante.');
     }
     setMenuAbierto(false);
+  };
+
+  // LÓGICA DEL GESTOR DE RETOS
+  const agregarReto = async () => {
+    if (!nuevoRetoTexto.trim()) return;
+    try {
+      const nuevoReto = { id: Date.now().toString(), texto: nuevoRetoTexto.trim(), activo: true };
+      const docRef = doc(db, 'albums', albumId);
+      
+      if (!album.listaRetos) {
+         // Si es un álbum viejo que no tiene lista, la creamos base + el nuevo
+         await updateDoc(docRef, { listaRetos: [...RETOS_POR_DEFECTO, nuevoReto] });
+      } else {
+         await updateDoc(docRef, { listaRetos: arrayUnion(nuevoReto) });
+      }
+      setNuevoRetoTexto('');
+    } catch (error) {
+      console.error(error);
+      alert("Error al agregar el reto.");
+    }
+  };
+
+  const eliminarReto = async (reto) => {
+    const docRef = doc(db, 'albums', albumId);
+    try {
+      await updateDoc(docRef, { listaRetos: arrayRemove(reto) });
+    } catch (error) {
+      console.error(error);
+      alert("Error al eliminar.");
+    }
+  };
+
+  const abrirGestorRetos = () => {
+    openModal();
+    setMostrarGestorRetos(true);
+    setMenuAbierto(false);
+    
+    // Si el álbum es nuevo y no tiene la lista copiada, la copiamos primero para poder editarla
+    if (!album.listaRetos || album.listaRetos.length === 0) {
+      updateDoc(doc(db, 'albums', albumId), { listaRetos: RETOS_POR_DEFECTO });
+    }
+  };
+
+  const cerrarGestorRetos = () => {
+    setMostrarGestorRetos(false);
+    closeModal();
   };
 
   if (cargando) return <div className="min-h-screen flex items-center justify-center font-sans">Cargando...</div>;
@@ -590,10 +629,11 @@ export default function MuroEvento() {
   const historiaActiva = visorHistorias ? visorHistorias.lista[visorHistorias.currentIndex] : null;
   const usuarioDioLikeHistoria = historiaActiva ? (historiaActiva.likesArray || []).includes(usuarioId) : false;
 
+  const listaActualRetos = album.listaRetos?.length > 0 ? album.listaRetos : RETOS_POR_DEFECTO;
+
   return (
     <div className="min-h-screen bg-[#f8f9fa] flex flex-col font-sans overflow-hidden relative">
       
-      {/* Input de archivos general */}
       <input type="file" accept="image/*,video/*" ref={muroInputRef} onChange={handleFileSelected} style={{ display: 'none' }} />
 
       {archivoEditando !== null && (
@@ -638,7 +678,7 @@ export default function MuroEvento() {
         </div>
       )}
 
-      {/* VISOR DE HISTORIAS / TOP RANKING */}
+      {/* VISOR DE HISTORIAS */}
       {visorHistorias !== null && (
         <div className="fixed inset-0 z-[100] flex flex-col" style={{ backgroundColor: `rgba(0, 0, 0, ${Math.max(0, 1 - Math.abs(swipeOffset) / 400)})`, transform: `translateY(${swipeOffset}px)`, transition: swipeOffset === 0 ? 'transform 0.25s ease-out, background-color 0.25s ease-out' : 'none', touchAction: 'none' }} onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
           <div className="absolute top-0 w-full p-4 pt-6 flex flex-col gap-3 z-[110] bg-gradient-to-b from-black/80 to-transparent pointer-events-none">
@@ -660,7 +700,6 @@ export default function MuroEvento() {
           <div className="absolute inset-y-0 left-0 w-[30%] z-[100]" onClick={retrocederHistoria}></div>
           <div className="absolute inset-y-0 right-0 w-[70%] z-[100]" onClick={avanzarHistoria}></div>
 
-          {/* Panel y Botones para HISTORIAS idéntico al Muro */}
           <div className="absolute bottom-0 inset-x-0 p-6 pb-8 bg-gradient-to-t from-black via-black/80 to-transparent flex flex-col gap-4 z-[120] pointer-events-none">
             
             <div className="flex items-center justify-end gap-6 text-white pointer-events-auto">
@@ -685,18 +724,8 @@ export default function MuroEvento() {
               >
                 <div className="flex justify-between items-center border-b border-white/10 pb-2">
                   <div className="flex gap-4">
-                    <button 
-                      onClick={() => setPestañaActiva('comentarios')}
-                      className={`text-xs font-bold uppercase tracking-wider transition pb-1 ${pestañaActiva === 'comentarios' ? 'text-zinc-100 border-b-2 border-blue-500' : 'text-zinc-500'}`}
-                    >
-                      Comentarios
-                    </button>
-                    <button 
-                      onClick={() => setPestañaActiva('likes')}
-                      className={`text-xs font-bold uppercase tracking-wider transition pb-1 ${pestañaActiva === 'likes' ? 'text-zinc-100 border-b-2 border-red-500' : 'text-zinc-500'}`}
-                    >
-                      Me gusta
-                    </button>
+                    <button onClick={() => setPestañaActiva('comentarios')} className={`text-xs font-bold uppercase tracking-wider transition pb-1 ${pestañaActiva === 'comentarios' ? 'text-zinc-100 border-b-2 border-blue-500' : 'text-zinc-500'}`}>Comentarios</button>
+                    <button onClick={() => setPestañaActiva('likes')} className={`text-xs font-bold uppercase tracking-wider transition pb-1 ${pestañaActiva === 'likes' ? 'text-zinc-100 border-b-2 border-red-500' : 'text-zinc-500'}`}>Me gusta</button>
                   </div>
                   <button onClick={() => setPanelInteractivoAbierto(false)} className="text-zinc-400 text-2xl leading-none pb-1">×</button>
                 </div>
@@ -732,13 +761,7 @@ export default function MuroEvento() {
                 {pestañaActiva === 'comentarios' && (
                   <div className="pt-1 border-t border-white/10 mt-1">
                       <form onSubmit={enviarComentario} className="flex gap-2">
-                        <input 
-                          type="text" 
-                          placeholder="Escribe un comentario..." 
-                          value={nuevoComentarioTexto}
-                          onChange={(e) => setNuevoComentarioTexto(e.target.value)}
-                          className="flex-1 bg-white/10 text-white placeholder-zinc-400 px-3 py-2.5 rounded-xl outline-none text-xs border border-white/10"
-                        />
+                        <input type="text" placeholder="Escribe un comentario..." value={nuevoComentarioTexto} onChange={(e) => setNuevoComentarioTexto(e.target.value)} className="flex-1 bg-white/10 text-white placeholder-zinc-400 px-3 py-2.5 rounded-xl outline-none text-xs border border-white/10" />
                         <button type="submit" className="bg-blue-600 text-white px-4 py-2.5 rounded-xl text-xs font-bold shadow-md hover:bg-blue-500 transition">Enviar</button>
                       </form>
                   </div>
@@ -764,11 +787,7 @@ export default function MuroEvento() {
             
             <div className="flex items-center gap-3 pointer-events-auto">
               {itemActivo?.subidoPor === usuarioId && (
-                <button 
-                  onClick={() => borrarPublicacion(itemActivo)} 
-                  className="w-10 h-10 flex items-center justify-center bg-red-600/80 hover:bg-red-500 rounded-full backdrop-blur-md text-white transition active:scale-95 shadow-[0_4px_15px_rgba(220,38,38,0.5)] border border-white/20"
-                  title="Borrar mi publicación"
-                >
+                <button onClick={() => borrarPublicacion(itemActivo)} className="w-10 h-10 flex items-center justify-center bg-red-600/80 hover:bg-red-500 rounded-full backdrop-blur-md text-white transition active:scale-95 shadow-[0_4px_15px_rgba(220,38,38,0.5)] border border-white/20" title="Borrar mi publicación">
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                   </svg>
@@ -781,22 +800,11 @@ export default function MuroEvento() {
           {itemActivoIndex > 0 && <button onClick={retrocederItemMuro} className="absolute left-4 top-1/2 -translate-y-1/2 text-white text-4xl bg-black/40 rounded-full w-12 h-12 flex items-center justify-center pb-2 z-[120] hover:bg-black/60 hidden sm:flex">‹</button>}
           {itemActivoIndex < itemsMuro.length - 1 && <button onClick={avanzarItemMuro} className="absolute right-4 top-1/2 -translate-y-1/2 text-white text-4xl bg-black/40 rounded-full w-12 h-12 flex items-center justify-center pb-2 z-[120] hover:bg-black/60 hidden sm:flex">›</button>}
 
-          <div 
-            className="relative w-full h-full" 
-            style={{ transform: `translateY(${muroSwipeOffset.y}px)`, transition: isSwipingMuro ? 'none' : 'transform 0.3s ease-out' }} 
-            onTouchStart={handleMuroTouchStart} 
-            onTouchMove={handleMuroTouchMove} 
-            onTouchEnd={handleMuroTouchEnd}
-          >
+          <div className="relative w-full h-full" style={{ transform: `translateY(${muroSwipeOffset.y}px)`, transition: isSwipingMuro ? 'none' : 'transform 0.3s ease-out' }} onTouchStart={handleMuroTouchStart} onTouchMove={handleMuroTouchMove} onTouchEnd={handleMuroTouchEnd}>
             {itemsMuro.map((item, index) => {
               if (Math.abs(index - itemActivoIndex) > 2) return null;
               return (
-                <div 
-                  key={item.id} 
-                  className="absolute inset-0 w-full h-full flex items-center justify-center" 
-                  style={{ transform: `translateX(calc(${((index - itemActivoIndex) * 100)}% + ${muroSwipeOffset.x}px))`, transition: isSwipingMuro ? 'none' : 'transform 0.35s cubic-bezier(0.25, 0.8, 0.25, 1)' }}
-                  onClick={() => { if(panelInteractivoAbierto) setPanelInteractivoAbierto(false); }}
-                >
+                <div key={item.id} className="absolute inset-0 w-full h-full flex items-center justify-center" style={{ transform: `translateX(calc(${((index - itemActivoIndex) * 100)}% + ${muroSwipeOffset.x}px))`, transition: isSwipingMuro ? 'none' : 'transform 0.35s cubic-bezier(0.25, 0.8, 0.25, 1)' }} onClick={() => { if(panelInteractivoAbierto) setPanelInteractivoAbierto(false); }}>
                   {item.tipo === 'video' ? (
                     <video id={`video-muro-${index}`} src={item.url} playsInline controls={index === itemActivoIndex} onTimeUpdate={manejarTiempoMuro} className={`max-w-full max-h-full object-contain ${index === itemActivoIndex ? 'pointer-events-auto z-50' : 'pointer-events-none'}`} />
                   ) : (
@@ -807,45 +815,24 @@ export default function MuroEvento() {
             })}
           </div>
 
-          {/* Panel y Botones para MURO */}
           <div className="absolute bottom-0 inset-x-0 p-6 pb-8 bg-gradient-to-t from-black via-black/80 to-transparent flex flex-col gap-4 z-[130] pointer-events-none">
-            
             <div className="flex items-center justify-end gap-6 text-white pointer-events-auto">
-              
               <button onClick={() => { setPanelInteractivoAbierto(true); setPestañaActiva('comentarios'); }} className="flex items-center gap-2 text-sm font-semibold transition active:scale-110">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
                 {(itemActivo?.comentarios || []).length > 0 && <span>{(itemActivo?.comentarios || []).length}</span>}
               </button>
-
-              <button 
-                onClick={(e) => handleLike(e, itemActivo)}
-                className="flex items-center gap-2 text-sm font-semibold transition active:scale-125"
-              >
+              <button onClick={(e) => handleLike(e, itemActivo)} className="flex items-center gap-2 text-sm font-semibold transition active:scale-125">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={usuarioDioLikeActivo ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`w-6 h-6 ${usuarioDioLikeActivo ? 'text-red-500' : 'text-white'}`}><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
                 {(itemActivo?.likesArray || []).length > 0 && <span>{(itemActivo?.likesArray || []).length}</span>}
               </button>
-
             </div>
 
             {panelInteractivoAbierto && (
-              <div 
-                className="bg-zinc-900/95 backdrop-blur-md rounded-2xl p-4 max-h-72 flex flex-col gap-3 border border-white/10 shadow-2xl pointer-events-auto"
-                onClick={(e) => e.stopPropagation()} 
-              >
+              <div className="bg-zinc-900/95 backdrop-blur-md rounded-2xl p-4 max-h-72 flex flex-col gap-3 border border-white/10 shadow-2xl pointer-events-auto" onClick={(e) => e.stopPropagation()}>
                 <div className="flex justify-between items-center border-b border-white/10 pb-2">
                   <div className="flex gap-4">
-                    <button 
-                      onClick={() => setPestañaActiva('comentarios')}
-                      className={`text-xs font-bold uppercase tracking-wider transition pb-1 ${pestañaActiva === 'comentarios' ? 'text-zinc-100 border-b-2 border-blue-500' : 'text-zinc-500'}`}
-                    >
-                      Comentarios
-                    </button>
-                    <button 
-                      onClick={() => setPestañaActiva('likes')}
-                      className={`text-xs font-bold uppercase tracking-wider transition pb-1 ${pestañaActiva === 'likes' ? 'text-zinc-100 border-b-2 border-red-500' : 'text-zinc-500'}`}
-                    >
-                      Me gusta
-                    </button>
+                    <button onClick={() => setPestañaActiva('comentarios')} className={`text-xs font-bold uppercase tracking-wider transition pb-1 ${pestañaActiva === 'comentarios' ? 'text-zinc-100 border-b-2 border-blue-500' : 'text-zinc-500'}`}>Comentarios</button>
+                    <button onClick={() => setPestañaActiva('likes')} className={`text-xs font-bold uppercase tracking-wider transition pb-1 ${pestañaActiva === 'likes' ? 'text-zinc-100 border-b-2 border-red-500' : 'text-zinc-500'}`}>Me gusta</button>
                   </div>
                   <button onClick={() => setPanelInteractivoAbierto(false)} className="text-zinc-400 text-2xl leading-none pb-1">×</button>
                 </div>
@@ -878,23 +865,71 @@ export default function MuroEvento() {
                   )}
                 </div>
 
-
                 {pestañaActiva === 'comentarios' && (
                   <div className="pt-1 border-t border-white/10 mt-1">
                       <form onSubmit={enviarComentario} className="flex gap-2">
-                        <input 
-                          type="text" 
-                          placeholder="Escribe un comentario..." 
-                          value={nuevoComentarioTexto}
-                          onChange={(e) => setNuevoComentarioTexto(e.target.value)}
-                          className="flex-1 bg-white/10 text-white placeholder-zinc-400 px-3 py-2.5 rounded-xl outline-none text-xs border border-white/10"
-                        />
+                        <input type="text" placeholder="Escribe un comentario..." value={nuevoComentarioTexto} onChange={(e) => setNuevoComentarioTexto(e.target.value)} className="flex-1 bg-white/10 text-white placeholder-zinc-400 px-3 py-2.5 rounded-xl outline-none text-xs border border-white/10" />
                         <button type="submit" className="bg-blue-600 text-white px-4 py-2.5 rounded-xl text-xs font-bold shadow-md hover:bg-blue-500 transition">Enviar</button>
                       </form>
                   </div>
                 )}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* GESTOR DE RETOS (Modal Exclusivo Admin) */}
+      {mostrarGestorRetos && esAdmin && (
+        <div className="fixed inset-0 z-[300] bg-black/80 backdrop-blur-sm flex flex-col p-4 sm:p-6 animate-fade-in">
+          <div className="bg-white rounded-3xl w-full max-w-lg mx-auto h-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden mt-10">
+            
+            <div className="flex justify-between items-center p-6 border-b border-gray-100 bg-gray-50/50">
+              <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                <span className="text-2xl">⚙️</span> Configurar Retos
+              </h2>
+              <button onClick={cerrarGestorRetos} className="w-10 h-10 bg-gray-200 text-gray-500 rounded-full flex items-center justify-center text-2xl font-light hover:bg-red-100 hover:text-red-600 transition">×</button>
+            </div>
+
+            <div className="p-6 bg-white border-b border-gray-100">
+              <div className="flex gap-2">
+                <input 
+                  type="text" 
+                  placeholder="Escribe un reto nuevo..." 
+                  value={nuevoRetoTexto}
+                  onChange={(e) => setNuevoRetoTexto(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && agregarReto()}
+                  className="flex-1 bg-gray-100 border border-gray-200 rounded-xl px-4 py-3 outline-none focus:border-blue-500 focus:bg-white transition text-sm font-medium"
+                />
+                <button onClick={agregarReto} className="bg-blue-600 text-white px-5 rounded-xl font-bold text-sm shadow-md hover:bg-blue-700 transition active:scale-95">
+                  Agregar
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 bg-gray-50/50">
+              {listaActualRetos.length === 0 ? (
+                <p className="text-center text-gray-400 mt-10 text-sm">No hay retos. Agrega uno nuevo.</p>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {listaActualRetos.map((reto, idx) => (
+                    <div key={reto.id || idx} className="flex justify-between items-center bg-white p-3 rounded-xl border border-gray-200 shadow-sm group">
+                      <span className="text-sm font-medium text-gray-700 flex-1 pr-4">{reto.texto}</span>
+                      <button 
+                        onClick={() => eliminarReto(reto)} 
+                        className="w-8 h-8 flex items-center justify-center bg-red-50 text-red-500 rounded-lg opacity-100 sm:opacity-0 group-hover:opacity-100 transition hover:bg-red-500 hover:text-white"
+                        title="Borrar Reto"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
           </div>
         </div>
       )}
@@ -918,11 +953,11 @@ export default function MuroEvento() {
                 <button key={item.id} onClick={() => abrirHistoria(index)} className={`flex-shrink-0 relative rounded-[16px] p-[2px] transition-all transform hover:scale-95 ${visto ? 'bg-gray-200' : 'bg-gradient-to-tr from-blue-500 to-purple-500'}`}>
                   <div className="w-14 h-20 bg-black rounded-[14px] overflow-hidden border-[2px] border-white relative flex items-center justify-center">
                     
-{item.tipo === 'video' ? (
+                  {item.tipo === 'video' ? (
                     <video src={`${item.url}#t=0.001`} preload="metadata" muted playsInline className="w-full h-full object-cover" />
                   ) : (
-					<img src={item.url} className={`w-full h-full object-cover transition-opacity duration-300 ${visto ? 'opacity-50' : 'opacity-90'}`} />
-                    )}
+					          <img src={item.url} className={`w-full h-full object-cover transition-opacity duration-300 ${visto ? 'opacity-50' : 'opacity-90'}`} />
+                  )}
                     
                     <span className="absolute top-1 left-1 bg-black/70 text-white px-1.5 py-0.5 rounded-md text-[9px] font-black tracking-widest shadow-md">
                       #{index + 1}
@@ -997,7 +1032,7 @@ export default function MuroEvento() {
         )}
       </main>
 
- {menuAbierto && (
+      {menuAbierto && (
         <div className="fixed inset-0 z-[200] flex justify-end bg-black/40 backdrop-blur-sm" onClick={() => setMenuAbierto(false)}>
           <div className="w-64 bg-white h-full shadow-2xl flex flex-col p-6 transition-transform" onClick={e => e.stopPropagation()}>
             
@@ -1007,23 +1042,31 @@ export default function MuroEvento() {
             </div>
             
             <div className="flex flex-col gap-3">
-              {/* Botón 0: Sorteo de Retos (NUEVO) */}
               <button onClick={() => { setMostrarSorteo(true); setMenuAbierto(false); }} className="flex items-center gap-3 text-sm font-bold text-white bg-gradient-to-r from-purple-600 to-blue-600 hover:scale-105 transition p-4 rounded-xl shadow-lg w-full text-left mb-2">
                 <span className="text-xl">🎲</span>
                 ¡Sorteo de Retos!
               </button>
+              
+              {/* Candado: Gestor de Retos SOLO PARA ADMIN */}
+              {esAdmin && (
+                <button onClick={abrirGestorRetos} className="flex items-center gap-3 text-sm font-bold text-gray-700 hover:text-purple-600 transition p-4 bg-gray-50 rounded-xl border border-gray-100 shadow-sm w-full text-left mb-2">
+                  <span className="text-lg">⚙️</span>
+                  Configurar Retos
+                </button>
+              )}
 
-              {/* Botón 1: Compartir Álbum (Invitados) */}
               <button onClick={compartirAlbum} className="flex items-center gap-3 text-sm font-bold text-gray-700 hover:text-blue-600 transition p-4 bg-gray-50 rounded-xl border border-gray-100 shadow-sm w-full text-left">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
                 Compartir Álbum
               </button>
               
-              {/* Botón 2: Compartir Transmisión (Operador Pantalla) */}
-              <button onClick={compartirTransmision} className="flex items-center gap-3 text-sm font-bold text-gray-700 hover:text-red-600 transition p-4 bg-gray-50 rounded-xl border border-gray-100 shadow-sm w-full text-left">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5"><rect x="2" y="7" width="20" height="15" rx="2" ry="2"></rect><polyline points="17 2 12 7 7 2"></polyline></svg>
-                Transmisión
-              </button>
+              {/* Candado: Botón de Transmisión SOLO PARA ADMIN */}
+              {esAdmin && (
+                <button onClick={compartirTransmision} className="flex items-center gap-3 text-sm font-bold text-gray-700 hover:text-red-600 transition p-4 bg-gray-50 rounded-xl border border-gray-100 shadow-sm w-full text-left">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5"><rect x="2" y="7" width="20" height="15" rx="2" ry="2"></rect><polyline points="17 2 12 7 7 2"></polyline></svg>
+                  Transmisión TV
+                </button>
+              )}
             </div>
 
             <div className="mt-auto border-t border-gray-100 pt-4">
@@ -1076,14 +1119,12 @@ export default function MuroEvento() {
         </div>
       )}
 
-      {/* Botón flotante principal de + conectado al muro */}
       <div className="fixed bottom-10 w-full flex justify-center z-20 pointer-events-none">
         <button onClick={() => muroInputRef.current.click()} disabled={subiendo} className={`pointer-events-auto bg-blue-600 text-white w-16 h-16 rounded-full shadow-[0_10px_25px_rgba(37,99,235,0.4)] flex items-center justify-center text-4xl pb-1 hover:bg-blue-700 transition transform ${subiendo ? 'opacity-50 scale-95' : 'hover:-translate-y-1'}`}>
           {subiendo ? <span className="text-lg">⏳</span> : '+'}
         </button>
       </div>
 
-      {/* COMPONENTE DE SORTEO FLOTANTE */}
       {mostrarSorteo && (
         <SorteoReto album={album} onClose={() => setMostrarSorteo(false)} />
       )}
