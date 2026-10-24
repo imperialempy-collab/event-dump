@@ -51,10 +51,6 @@ export default function MuroEvento() {
   const usuarioNombre = usuario ? (usuario.displayName || usuario.email || 'Usuario') : 'Invitado';
   
   const esAnonimo = !usuario;
-  const alertaAnonimo = (e) => {
-    if(e) e.stopPropagation();
-    alert('Debes iniciar sesión para interactuar');
-  };
 
   useEffect(() => {
     if (!albumId) return;
@@ -660,7 +656,7 @@ export default function MuroEvento() {
               </button>
 
               <button 
-                onClick={(e) => esAnonimo ? alertaAnonimo(e) : handleLike(e, historiaActiva)}
+                onClick={(e) => handleLike(e, historiaActiva)}
                 className="flex items-center gap-2 text-sm font-semibold transition active:scale-125"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={usuarioDioLikeHistoria ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`w-6 h-6 ${usuarioDioLikeHistoria ? 'text-red-500' : 'text-white'}`}><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
@@ -794,7 +790,7 @@ export default function MuroEvento() {
               </button>
 
               <button 
-                onClick={(e) => esAnonimo ? alertaAnonimo(e) : handleLike(e, itemActivo)}
+                onClick={(e) => handleLike(e, itemActivo)}
                 className="flex items-center gap-2 text-sm font-semibold transition active:scale-125"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={usuarioDioLikeActivo ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`w-6 h-6 ${usuarioDioLikeActivo ? 'text-red-500' : 'text-white'}`}><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
@@ -857,11 +853,6 @@ export default function MuroEvento() {
 
                 {pestañaActiva === 'comentarios' && (
                   <div className="pt-1 border-t border-white/10 mt-1">
-                    {esAnonimo ? (
-                      <div className="p-3 bg-white/5 border border-white/10 rounded-xl text-center cursor-pointer" onClick={alertaAnonimo}>
-                        <p className="text-xs font-medium text-zinc-400">Inicia sesión para comentar</p>
-                      </div>
-                    ) : (
                       <form onSubmit={enviarComentario} className="flex gap-2">
                         <input 
                           type="text" 
@@ -872,7 +863,6 @@ export default function MuroEvento() {
                         />
                         <button type="submit" className="bg-blue-600 text-white px-4 py-2.5 rounded-xl text-xs font-bold shadow-md hover:bg-blue-500 transition">Enviar</button>
                       </form>
-                    )}
                   </div>
                 )}
               </div>
@@ -962,7 +952,7 @@ export default function MuroEvento() {
                     )}
 
                     <button 
-                      onClick={(e) => esAnonimo ? alertaAnonimo(e) : handleLike(e, item)}
+                      onClick={(e) => handleLike(e, item)}
                       className="flex items-center gap-1 text-xs font-semibold transition active:scale-125"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={corazonRojo ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`w-4 h-4 ${corazonRojo ? 'text-red-500' : 'text-white'}`}><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
