@@ -721,11 +721,6 @@ export default function MuroEvento() {
 
                 {pestañaActiva === 'comentarios' && (
                   <div className="pt-1 border-t border-white/10 mt-1">
-                    {esAnonimo ? (
-                      <div className="p-3 bg-white/5 border border-white/10 rounded-xl text-center cursor-pointer" onClick={alertaAnonimo}>
-                        <p className="text-xs font-medium text-zinc-400">Inicia sesión para comentar</p>
-                      </div>
-                    ) : (
                       <form onSubmit={enviarComentario} className="flex gap-2">
                         <input 
                           type="text" 
@@ -736,7 +731,6 @@ export default function MuroEvento() {
                         />
                         <button type="submit" className="bg-blue-600 text-white px-4 py-2.5 rounded-xl text-xs font-bold shadow-md hover:bg-blue-500 transition">Enviar</button>
                       </form>
-                    )}
                   </div>
                 )}
               </div>
