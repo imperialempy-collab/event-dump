@@ -1,7 +1,7 @@
 import { useRouter } from 'next/router';
 import { useState, useEffect, useRef } from 'react';
 import { db, storage } from '../../firebase/config';
-import { doc, getDoc, collection, addDoc, onSnapshot, query, orderBy, updateDoc, increment, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { doc, getDoc, collection, addDoc, onSnapshot, query, orderBy, updateDoc, increment, arrayUnion, arrayRemove, deleteDoc } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useAuthContext } from '../../context/AuthContext';
 import SorteoReto from '../../components/SorteoReto';
@@ -464,6 +464,20 @@ export default function MuroEvento() {
   const handleTouchMove = (e) => { const diffY = e.touches[0].clientY - touchStartRef.current.y; const diffX = e.touches[0].clientX - touchStartRef.current.x; if (Math.abs(diffY) > Math.abs(diffX) && Math.abs(diffY) > 10) setSwipeOffset(diffY); };
   const handleTouchEnd = (e) => { const diffY = e.changedTouches[0].clientY - touchStartRef.current.y; const diffX = e.changedTouches[0].clientX - touchStartRef.current.x; if (Math.abs(diffY) > Math.abs(diffX) && Math.abs(diffY) > 80) cerrarVisorHistorias(); else setSwipeOffset(0); };
 
+  const borrarPublicacion = async (item) => {
+    if (!item) return;
+    const confirmar = window.confirm("¿Seguro que deseas eliminar tu publicación?");
+    if (!confirmar) return;
+
+    try {
+      await deleteDoc(doc(db, 'albums', albumId, 'fotos', item.id));
+      cerrarItemMuro(); // Cierra el visor automáticamente tras borrar
+    } catch (error) {
+      console.error("Error al borrar:", error);
+      alert("Hubo un error al borrar la publicación.");
+    }
+  };
+
   const abrirItemMuro = (index) => { 
     openModal();
     setItemActivoIndex(index); 
@@ -746,8 +760,22 @@ export default function MuroEvento() {
           }}
         >
           <div className="absolute top-0 inset-x-0 p-4 pt-6 flex justify-between items-center z-[130] bg-gradient-to-b from-black/80 to-transparent pointer-events-none">
-            <span className="text-white/80 text-xs font-medium tracking-wide">Publicado por {itemActivo?.subidoPorNombre || 'Invitado'}</span>
-            <button onClick={cerrarItemMuro} className="text-white text-4xl font-light w-12 h-12 flex items-center justify-center pointer-events-auto bg-black/20 rounded-full backdrop-blur-md">×</button>
+            <span className="text-white/80 text-xs font-medium tracking-wide drop-shadow-md">Publicado por {itemActivo?.subidoPorNombre || 'Invitado'}</span>
+            
+            <div className="flex items-center gap-3 pointer-events-auto">
+              {itemActivo?.subidoPor === usuarioId && (
+                <button 
+                  onClick={() => borrarPublicacion(itemActivo)} 
+                  className="w-10 h-10 flex items-center justify-center bg-red-600/80 hover:bg-red-500 rounded-full backdrop-blur-md text-white transition active:scale-95 shadow-[0_4px_15px_rgba(220,38,38,0.5)] border border-white/20"
+                  title="Borrar mi publicación"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
+              )}
+              <button onClick={cerrarItemMuro} className="text-white text-4xl font-light w-11 h-11 flex items-center justify-center bg-black/30 border border-white/10 rounded-full backdrop-blur-md pb-1 hover:bg-black/50 transition">×</button>
+            </div>
           </div>
           
           {itemActivoIndex > 0 && <button onClick={retrocederItemMuro} className="absolute left-4 top-1/2 -translate-y-1/2 text-white text-4xl bg-black/40 rounded-full w-12 h-12 flex items-center justify-center pb-2 z-[120] hover:bg-black/60 hidden sm:flex">‹</button>}
