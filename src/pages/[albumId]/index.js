@@ -194,8 +194,16 @@ export default function MuroEvento() {
     const file = e.target.files[0];
     if (!file) return;
 
-    openModal();
     const tipo = file.type.startsWith('video/') ? 'video' : 'imagen';
+
+    // NUEVO: El Guardia de Seguridad (30MB = 30 * 1048576 bytes)
+    if (tipo === 'video' && file.size > 30 * 1048576) {
+      alert('Este video es muy pesado para compartirlo rápido en vivo (Máx 30MB). Por favor, graba uno más corto o recórtalo en la galería de tu celular.');
+      e.target.value = null; 
+      return;
+    }
+
+    openModal();
     setArchivoEditando({
       file,
       previewUrl: URL.createObjectURL(file),
@@ -211,23 +219,45 @@ export default function MuroEvento() {
     closeModal();
   };
 
-  const publicarArchivo = async () => {
+ const publicarArchivo = async () => {
     if (!archivoEditando) return;
     setSubiendo(true);
     try {
-      let archivoFinal = archivoEditando.file;
+      let urlDescarga = '';
 
-      if (archivoEditando.tipo === 'imagen') {
-        archivoFinal = await comprimirImagen(archivoEditando.file);
+      if (archivoEditando.tipo === 'video') {
+        // --- NUEVO: RUTA CLOUDINARY PARA VIDEOS ---
+        const formData = new FormData();
+        formData.append('file', archivoEditando.file);
+        formData.append('upload_preset', 'ml_default');
+        formData.append('cloud_name', 'qalh60rk'); // Tu cuenta
+
+        // Hacemos la petición directa a la API de Cloudinary sin pasar por Firebase Storage
+        const res = await fetch('https://api.cloudinary.com/v1_1/qalh60rk/video/upload', {
+          method: 'POST',
+          body: formData
+        });
+
+        if (!res.ok) throw new Error('Error al subir el video a Cloudinary');
+        const data = await res.json();
+
+        // Magia: Le inyectamos "q_auto,vc_auto" al link para que Cloudinary 
+        // comprima y adapte el video para TVs y navegadores al instante.
+        const partes = data.secure_url.split('/upload/');
+        urlDescarga = partes[0] + '/upload/q_auto,vc_auto/' + partes[1];
+
+      } else {
+        // --- RUTA CLÁSICA FIREBASE PARA FOTOS (Se mantiene igual) ---
+        const archivoFinal = await comprimirImagen(archivoEditando.file);
+        const extension = archivoFinal.name.split('.').pop() || 'jpg';
+        const nombreArchivo = `${Date.now()}-${Math.random().toString(36).substring(2)}.${extension}`;
+        const ruta = storageRef(storage, `eventos/${albumId}/${nombreArchivo}`);
+
+        await uploadBytes(ruta, archivoFinal);
+        urlDescarga = await getDownloadURL(ruta);
       }
 
-      const extension = archivoFinal.name.split('.').pop() || (archivoEditando.tipo === 'video' ? 'mp4' : 'jpg');
-      const nombreArchivo = `${Date.now()}-${Math.random().toString(36).substring(2)}.${extension}`;
-      const ruta = storageRef(storage, `eventos/${albumId}/${nombreArchivo}`);
-
-      await uploadBytes(ruta, archivoFinal);
-      const urlDescarga = await getDownloadURL(ruta);
-
+      // --- GUARDAR EN FIRESTORE (Se mantiene igual para ambos) ---
       const comentariosIniciales = archivoEditando.comentario.trim() ? [{
         id: Date.now().toString(),
         texto: archivoEditando.comentario.trim(),
