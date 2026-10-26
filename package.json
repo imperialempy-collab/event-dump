@@ -14,7 +14,9 @@
   "description": "",
   "dependencies": {
     "autoprefixer": "^10.6.1",
+    "file-saver": "^2.0.5",
     "firebase": "^12.19.0",
+    "jszip": "^3.10.2",
     "next": "^16.3.8",
     "postcss": "^8.5.29",
     "react": "^19.3.0",
