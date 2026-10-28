@@ -1109,6 +1109,8 @@ export default function MuroEvento() {
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
                 Compartir Álbum
               </button>
+
+
 {/* Candado: Botones SOLO PARA ADMIN */}
               {esAdmin && (
                 <div className="flex flex-col gap-3">
@@ -1116,6 +1118,17 @@ export default function MuroEvento() {
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5"><rect x="2" y="7" width="20" height="15" rx="2" ry="2"></rect><polyline points="17 2 12 7 7 2"></polyline></svg>
                     Transmisión TV
                   </button>
+
+{/* NUEVO: Botón de acceso al Panel del Director */}
+                  <button 
+                    onClick={() => router.push(`/${albumId}/director`)} 
+                    className="flex items-center gap-3 text-sm font-bold text-white transition p-4 bg-zinc-900 hover:bg-black rounded-xl shadow-md w-full text-left"
+                  >
+                    <span className="text-lg">🎛️</span>
+                    Panel de Director
+                  </button>
+
+
 
                   {/* AQUÍ VA EL NUEVO BOTÓN DE DESCARGA */}
                   <BotonDescargaZip albumId={albumId} nombreEvento={album.nombreEvento} />

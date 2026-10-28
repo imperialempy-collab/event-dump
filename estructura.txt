@@ -1,0 +1,66 @@
+D:\pp
+├── (
+├── ({
+├── 0)
+├── a.tipo
+├── crea.js
+├── functions
+|  ├── index.js
+|  ├── package-lock.json
+|  └── package.json
+├── git
+├── guardarEnVistaPrevia(blob
+├── guardarEnVistaPrevia(new
+├── hace24Horas
+├── hace5Dias
+├── main
+├── package-lock.json
+├── package.json
+├── postcss.config.js
+├── public
+|  └── fotitos_portada.png
+├── setFotoActivaIndex(index)
+├── setFotoActivaIndex(null)
+├── src
+|  ├── components
+|  |  ├── album
+|  |  ├── BotonDescargaZip.js
+|  |  ├── copia sorteo 1.js
+|  |  ├── Nuevo documento de texto.txt
+|  |  ├── SorteoReto.js
+|  |  └── ui
+|  ├── constants
+|  |  ├── reglas.js
+|  |  └── retosBase.js
+|  ├── context
+|  |  └── AuthContext.js
+|  ├── firebase
+|  |  └── config.js
+|  ├── hooks
+|  |  ├── useAlbum.js
+|  |  ├── useAuth.js
+|  |  ├── useCamara.js
+|  |  └── useSubirArchivo.js
+|  ├── pages
+|  |  ├── copia index 1.js
+|  |  ├── crear.js
+|  |  ├── dashboard.js
+|  |  ├── index.js
+|  |  ├── info.js
+|  |  ├── [albumId]
+|  |  |  ├── copia de index 1.js
+|  |  |  ├── copia de pantalla 1.js
+|  |  |  ├── index.js
+|  |  |  └── pantalla.js
+|  |  └── _app.js
+|  ├── styles
+|  |  └── globals.css
+|  └── utils
+├── tailwind.config.js
+├── track.stop())
+├── unsubscribe()
+└── {
+
+directory: 1072 file: 3813
+
+ignored: directory (18)
