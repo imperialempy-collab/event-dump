@@ -1,7 +1,7 @@
 import { useRouter } from 'next/router';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { db } from '../../firebase/config';
-import { doc, getDoc, collection, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { doc, collection, onSnapshot, query, orderBy, updateDoc } from 'firebase/firestore';
 
 // Componente para las estrellitas de fondo (Optimizadas para GPU - Se mantiene igual)
 const ParticulasFondo = () => {
@@ -60,7 +60,7 @@ export default function PantallaGigante() {
   const timerRef = useRef(null);
   const latestArchivosRef = useRef([]);
 
-  // 1. Escuchar archivos en tiempo real
+  // 1. Escuchar archivos (AHORA IGNORA LOS OCULTOS POR EL DIRECTOR)
   useEffect(() => {
     if (!albumId) return;
     const q = query(collection(db, 'albums', albumId, 'fotos'), orderBy('creadoEn', 'desc'));
@@ -71,7 +71,9 @@ export default function PantallaGigante() {
         likesArray: doc.data().likesArray || [], 
         comentarios: doc.data().comentarios || [],
         ...doc.data() 
-      }));
+      }))
+      .filter(item => item.oculto !== true); // FILTRO MAESTRO: Si el DJ lo oculta, desaparece de aquí
+      
       setArchivos(data);
       latestArchivosRef.current = data;
       setCargando(false);
@@ -107,7 +109,7 @@ export default function PantallaGigante() {
     }
   }, [archivos]);
 
-  // 3. Motor de avance (CORTE DIRECTO + ESCUDO ANTI-FALLOS)
+  // 3. Motor de avance (CORTE DIRECTO)
   const avanzar = () => {
     let nextItem = null;
     let nuevaCola = [...colaReproduccion];
@@ -126,7 +128,6 @@ export default function PantallaGigante() {
       }
     }
 
-    // FAIL-SAFE: Si por alguna razón la lógica falló y no hay nextItem, fuerza la última publicación.
     if (!nextItem && latestArchivosRef.current.length > 0) {
       nextItem = latestArchivosRef.current[0];
       setColaReproduccion(generarNuevaCola().slice(1));
@@ -135,38 +136,57 @@ export default function PantallaGigante() {
     setCurrentItem(nextItem);
   };
 
-  // 4. Temporizador Automático Normal (Con Escudo Anti-Cuelgues)
+  // 4. Temporizador Automático
   useEffect(() => {
     if (!transmisionIniciada) return;
-
-    if (!currentItem && archivos.length > 0) {
-      avanzar();
-      return;
-    }
-
+    if (!currentItem && archivos.length > 0) { avanzar(); return; }
     if (isPaused || !currentItem) return;
     
-    // Si es foto, 8 segundos. Si es video, le damos 45 segundos MÁXIMO por si falla el 'onEnded'.
     const tiempoLimite = currentItem.tipo === 'video' ? 45000 : 8000;
     
     timerRef.current = setTimeout(() => { avanzar(); }, tiempoLimite);
     return () => clearTimeout(timerRef.current);
   }, [currentItem, isPaused, interrupciones, archivos.length, transmisionIniciada]);
   
-  // 5. NUEVO WATCHDOG (Perro Guardián Anti-Pantalla Vacía)
+  // 5. Watchdog
   useEffect(() => {
     if (!transmisionIniciada || isPaused) return;
-    
-    // Revisa cada 5 segundos si la pantalla se quedó trancada sin contenido visible
     const watchdog = setInterval(() => {
-      if (!currentItem && latestArchivosRef.current.length > 0) {
-        console.warn("Watchdog activado: Forzando recuperación de pantalla.");
-        avanzar();
-      }
+      if (!currentItem && latestArchivosRef.current.length > 0) avanzar();
     }, 5000);
-    
     return () => clearInterval(watchdog);
   }, [currentItem, transmisionIniciada, isPaused]);
+
+  // =====================================================================
+  // 6. EL WALKIE-TALKIE (Sincronización Maestra con Panel del Director)
+  // =====================================================================
+  useEffect(() => {
+    if (!albumId || !transmisionIniciada) return;
+    const reportarEstado = async () => {
+      try {
+        const estadoTV = {
+          // Qué está mostrando ahora mismo
+          actual: currentItem ? { id: currentItem.id, url: currentItem.url, tipo: currentItem.tipo, subidoPorNombre: currentItem.subidoPorNombre } : null,
+          // Cuáles son las próximas 5 fotos en la cola
+          cola: colaReproduccion.slice(0, 5).map(item => ({ id: item.id, url: item.url, tipo: item.tipo, subidoPorNombre: item.subidoPorNombre }))
+        };
+        // Lo escribe en Firebase para que el DJ lo lea al instante
+        await updateDoc(doc(db, 'albums', albumId), { tv: estadoTV });
+      } catch (error) { console.error("Error comunicando con Director:", error); }
+    };
+    reportarEstado();
+  }, [currentItem, colaReproduccion, transmisionIniciada, albumId]);
+
+  // 7. KILL-SWITCH: Si el DJ oculta la foto que se está proyectando, la TV la salta al instante
+  useEffect(() => {
+    if (currentItem && transmisionIniciada) {
+      const fotoAunExiste = archivos.some(a => a.id === currentItem.id);
+      if (!fotoAunExiste) {
+        avanzar(); // ¡Salto forzado porque el DJ la canceló!
+      }
+    }
+  }, [archivos, currentItem, transmisionIniciada]);
+  // =====================================================================
 
   // Controles
   const iniciarTransmisionManual = () => {
@@ -187,7 +207,6 @@ export default function PantallaGigante() {
     else document.exitFullscreen();
   };
 
-  // Buffer Optimizado: Reducido a solo 2 elementos para no fundir la VRAM de la TV
   const itemsParaPrecargar = useMemo(() => {
     const lista = [];
     if (interrupciones.length > 0) lista.push(...interrupciones);
@@ -204,7 +223,6 @@ export default function PantallaGigante() {
       onMouseMove={() => { setShowControls(true); clearTimeout(window.controlsTimeout); window.controlsTimeout = setTimeout(() => setShowControls(false), 3000); }}
     >
       
-      {/* EL BUFFER INVISIBLE (Reducido a max 2 elementos para TV) */}
       <div style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 0, height: 0, overflow: 'hidden', zIndex: -100 }}>
         {itemsParaPrecargar.map(item => (
           item.tipo === 'video' ? (
@@ -215,7 +233,6 @@ export default function PantallaGigante() {
         ))}
       </div>
 
-      {/* --- LOBBY DE ESPERA --- */}
       {!transmisionIniciada && (
         <div className="absolute inset-0 z-[200] flex flex-col items-center justify-center bg-zinc-900 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-zinc-800 to-black text-white">
             <h1 className="text-5xl font-black mb-10 tracking-widest uppercase text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500 drop-shadow-2xl">
@@ -245,12 +262,10 @@ export default function PantallaGigante() {
         </div>
       )}
 
-      {/* --- PANTALLA EN VIVO (Corte Directo, Sin Traslados) --- */}
       {transmisionIniciada && (
         <>
           <ParticulasFondo />
 
-          {/* CAPA 2: Contenedor de Medios (Solamente muestra el actual al instante) */}
           <div className="absolute inset-0 w-full h-full">
             {currentItem && (
               <div key={`curr-${currentItem.id}`} className="absolute inset-0 w-full h-full flex items-center justify-center p-12 z-20" style={{ transform: 'translateZ(0)' }}>
@@ -287,7 +302,6 @@ export default function PantallaGigante() {
             )}
           </div>
 
-          {/* CAPA 3: Controles del Operador */}
           <div className={`absolute bottom-10 left-10 z-50 flex gap-4 transition-opacity duration-500 ${showControls ? 'opacity-100' : 'opacity-0'}`}>
             <button onClick={() => setIsPaused(!isPaused)} className="w-16 h-16 bg-white/10 backdrop-blur-lg border border-white/20 rounded-full flex items-center justify-center text-white hover:bg-white/20 transition shadow-xl" title={isPaused ? "Reanudar" : "Pausar"}>
               {isPaused ? <span className="text-3xl pl-1">▶</span> : <span className="text-3xl font-black">II</span>}
