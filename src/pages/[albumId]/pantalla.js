@@ -158,25 +158,37 @@ export default function PantallaGigante() {
   }, [currentItem, transmisionIniciada, isPaused]);
 
   // =====================================================================
-  // 6. EL WALKIE-TALKIE (Sincronización Maestra con Panel del Director)
+  // 6. EL WALKIE-TALKIE (Blindado contra errores y valores vacíos)
   // =====================================================================
   useEffect(() => {
     if (!albumId || !transmisionIniciada) return;
     const reportarEstado = async () => {
       try {
         const estadoTV = {
-          // Qué está mostrando ahora mismo
-          actual: currentItem ? { id: currentItem.id, url: currentItem.url, tipo: currentItem.tipo, subidoPorNombre: currentItem.subidoPorNombre } : null,
-          // Cuáles son las próximas 5 fotos en la cola
-          cola: colaReproduccion.slice(0, 5).map(item => ({ id: item.id, url: item.url, tipo: item.tipo, subidoPorNombre: item.subidoPorNombre }))
+          actual: currentItem ? { 
+            id: currentItem.id || 'sin-id', 
+            url: currentItem.url || '', 
+            tipo: currentItem.tipo || 'imagen', 
+            subidoPorNombre: currentItem.subidoPorNombre || 'Invitado' 
+          } : null,
+          cola: colaReproduccion.slice(0, 5).map(item => ({ 
+            id: item.id || 'sin-id', 
+            url: item.url || '', 
+            tipo: item.tipo || 'imagen', 
+            subidoPorNombre: item.subidoPorNombre || 'Invitado' 
+          }))
         };
-        // Lo escribe en Firebase para que el DJ lo lea al instante
+        // Escribe en Firebase y avisa en la consola
         await updateDoc(doc(db, 'albums', albumId), { tv: estadoTV });
-      } catch (error) { console.error("Error comunicando con Director:", error); }
+        console.log("✅ SEÑAL ENVIADA AL DIRECTOR: ", estadoTV.actual?.id);
+      } catch (error) { 
+        console.error("❌ ERROR DEL WALKIE-TALKIE (Faltan permisos):", error); 
+      }
     };
     reportarEstado();
   }, [currentItem, colaReproduccion, transmisionIniciada, albumId]);
-
+  // =====================================================================
+  
   // 7. KILL-SWITCH: Si el DJ oculta la foto que se está proyectando, la TV la salta al instante
   useEffect(() => {
     if (currentItem && transmisionIniciada) {
