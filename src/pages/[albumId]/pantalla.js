@@ -3,7 +3,6 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { db } from '../../firebase/config';
 import { doc, collection, onSnapshot, query, orderBy, updateDoc } from 'firebase/firestore';
 
-// Componente para las estrellitas de fondo (Optimizadas para GPU - Se mantiene igual)
 const ParticulasFondo = () => {
   const particles = useMemo(() => Array.from({ length: 40 }).map((_, i) => ({
     id: i,
@@ -40,7 +39,10 @@ const ParticulasFondo = () => {
 
 export default function PantallaGigante() {
   const router = useRouter();
-  const { albumId } = router.query;
+  
+  // EL SWITCH MAESTRO: ¿Soy la TV real o soy el cuadrito del director?
+  const { albumId, espejo } = router.query;
+  const isEspejo = espejo === 'true'; 
   
   const [archivos, setArchivos] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -60,7 +62,7 @@ export default function PantallaGigante() {
   const timerRef = useRef(null);
   const latestArchivosRef = useRef([]);
 
-  // 1. Escuchar archivos (AHORA IGNORA LOS OCULTOS POR EL DIRECTOR)
+  // 1. Escuchar archivos (Ignora los ocultados)
   useEffect(() => {
     if (!albumId) return;
     const q = query(collection(db, 'albums', albumId, 'fotos'), orderBy('creadoEn', 'desc'));
@@ -71,8 +73,7 @@ export default function PantallaGigante() {
         likesArray: doc.data().likesArray || [], 
         comentarios: doc.data().comentarios || [],
         ...doc.data() 
-      }))
-      .filter(item => item.oculto !== true); // FILTRO MAESTRO: Si el DJ lo oculta, desaparece de aquí
+      })).filter(item => item.oculto !== true); 
       
       setArchivos(data);
       latestArchivosRef.current = data;
@@ -91,26 +92,30 @@ export default function PantallaGigante() {
   const generarNuevaCola = () => {
     const data = latestArchivosRef.current;
     if (data.length === 0) return [];
-    
     const ranking = [...data]
       .filter(a => (a.likesArray || []).length > 0)
       .sort((a, b) => b.likesArray.length - a.likesArray.length || (b.creadoEn?.toMillis?.() || 0) - (a.creadoEn?.toMillis?.() || 0));
-    
     const muro = [...data].filter(a => !ranking.some(r => r.id === a.id));
     return [...ranking, ...muro];
   };
 
-  // Lobby inicial
+  // Lobby inicial (Cortado si es espejo)
   useEffect(() => {
+    if (isEspejo) {
+      setPreparandoBuffer(false); // El espejo no prepara buffers, solo copia
+      return;
+    }
     if (archivos.length > 0 && colaReproduccion.length === 0 && !currentItem) {
       setColaReproduccion(generarNuevaCola());
       const t = setTimeout(() => setPreparandoBuffer(false), 2500);
       return () => clearTimeout(t);
     }
-  }, [archivos]);
+  }, [archivos, isEspejo]);
 
-  // 3. Motor de avance (CORTE DIRECTO)
+  // 3. Motor de avance (Cortado si es espejo)
   const avanzar = () => {
+    if (isEspejo) return; // El esclavo no avanza por su cuenta
+
     let nextItem = null;
     let nuevaCola = [...colaReproduccion];
 
@@ -118,87 +123,97 @@ export default function PantallaGigante() {
       nextItem = interrupciones[0];
       setInterrupciones(prev => prev.slice(1));
     } else {
-      if (nuevaCola.length === 0) {
-        nuevaCola = generarNuevaCola();
-      }
+      if (nuevaCola.length === 0) nuevaCola = generarNuevaCola();
       if (nuevaCola.length > 0) {
         nextItem = nuevaCola[0];
-        nuevaCola = nuevaCola.slice(1);
-        setColaReproduccion(nuevaCola);
+        setColaReproduccion(nuevaCola.slice(1));
       }
     }
-
     if (!nextItem && latestArchivosRef.current.length > 0) {
       nextItem = latestArchivosRef.current[0];
       setColaReproduccion(generarNuevaCola().slice(1));
     }
-
     setCurrentItem(nextItem);
   };
 
-  // 4. Temporizador Automático
+  // 4. Temporizador Automático (Cortado si es espejo)
   useEffect(() => {
-    if (!transmisionIniciada) return;
+    if (isEspejo || !transmisionIniciada) return;
     if (!currentItem && archivos.length > 0) { avanzar(); return; }
     if (isPaused || !currentItem) return;
     
     const tiempoLimite = currentItem.tipo === 'video' ? 45000 : 8000;
-    
     timerRef.current = setTimeout(() => { avanzar(); }, tiempoLimite);
     return () => clearTimeout(timerRef.current);
-  }, [currentItem, isPaused, interrupciones, archivos.length, transmisionIniciada]);
+  }, [currentItem, isPaused, interrupciones, archivos.length, transmisionIniciada, isEspejo]);
   
-  // 5. Watchdog
+  // 5. Watchdog (Cortado si es espejo)
   useEffect(() => {
-    if (!transmisionIniciada || isPaused) return;
+    if (isEspejo || !transmisionIniciada || isPaused) return;
     const watchdog = setInterval(() => {
       if (!currentItem && latestArchivosRef.current.length > 0) avanzar();
     }, 5000);
     return () => clearInterval(watchdog);
-  }, [currentItem, transmisionIniciada, isPaused]);
+  }, [currentItem, transmisionIniciada, isPaused, isEspejo]);
 
   // =====================================================================
-  // 6. EL WALKIE-TALKIE (Blindado contra errores y valores vacíos)
+  // 6. EL CEREBRO HÍBRIDO (Maestro vs Esclavo)
   // =====================================================================
   useEffect(() => {
-    if (!albumId || !transmisionIniciada) return;
-    const reportarEstado = async () => {
-      try {
-        const estadoTV = {
-          actual: currentItem ? { 
-            id: currentItem.id || 'sin-id', 
-            url: currentItem.url || '', 
-            tipo: currentItem.tipo || 'imagen', 
-            subidoPorNombre: currentItem.subidoPorNombre || 'Invitado' 
-          } : null,
-          cola: colaReproduccion.slice(0, 5).map(item => ({ 
-            id: item.id || 'sin-id', 
-            url: item.url || '', 
-            tipo: item.tipo || 'imagen', 
-            subidoPorNombre: item.subidoPorNombre || 'Invitado' 
-          }))
-        };
-        // Escribe en Firebase y avisa en la consola
-        await updateDoc(doc(db, 'albums', albumId), { tv: estadoTV });
-        console.log("✅ SEÑAL ENVIADA AL DIRECTOR: ", estadoTV.actual?.id);
-      } catch (error) { 
-        console.error("❌ ERROR DEL WALKIE-TALKIE (Faltan permisos):", error); 
-      }
-    };
-    reportarEstado();
-  }, [currentItem, colaReproduccion, transmisionIniciada, albumId]);
-  // =====================================================================
-  
-  // 7. KILL-SWITCH: Si el DJ oculta la foto que se está proyectando, la TV la salta al instante
+    if (!albumId) return;
+
+    if (isEspejo) {
+      // --- SI SOY EL ESPEJO (ESCLAVO) ---
+      // Solo escucho a Firebase y copio todo lo que hace la TV
+      const unsubscribe = onSnapshot(doc(db, 'albums', albumId), (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          if (data.tv) {
+            setTransmisionIniciada(!data.tv.lobby); // Copio el estado del lobby
+            setCurrentItem(data.tv.actual || null); // Copio la foto exacta
+            setAudioHabilitado(false); // SILENCIO MODO ESCLAVO para que no haga eco
+          }
+        }
+      });
+      return () => unsubscribe();
+
+    } else {
+      // --- SI SOY LA TV GIGANTE (MAESTRO) ---
+      // Escribo en Firebase lo que estoy haciendo
+      const reportarEstado = async () => {
+        try {
+          const estadoTV = {
+            lobby: !transmisionIniciada,
+            actual: currentItem ? { 
+              id: currentItem.id || 'sin-id', 
+              url: currentItem.url || '', 
+              tipo: currentItem.tipo || 'imagen', 
+              subidoPorNombre: currentItem.subidoPorNombre || 'Invitado',
+              comentarios: currentItem.comentarios || [],
+              likesArray: currentItem.likesArray || []
+            } : null,
+            cola: colaReproduccion.slice(0, 5).map(item => ({ 
+              id: item.id || 'sin-id', 
+              url: item.url || '', 
+              tipo: item.tipo || 'imagen', 
+              subidoPorNombre: item.subidoPorNombre || 'Invitado' 
+            }))
+          };
+          await updateDoc(doc(db, 'albums', albumId), { tv: estadoTV });
+        } catch (error) { console.error("Error al transmitir estado", error); }
+      };
+      reportarEstado();
+    }
+  }, [currentItem, colaReproduccion, transmisionIniciada, albumId, isEspejo]);
+
+  // 7. KILL-SWITCH (Cortado si es espejo)
   useEffect(() => {
+    if (isEspejo) return;
     if (currentItem && transmisionIniciada) {
       const fotoAunExiste = archivos.some(a => a.id === currentItem.id);
-      if (!fotoAunExiste) {
-        avanzar(); // ¡Salto forzado porque el DJ la canceló!
-      }
+      if (!fotoAunExiste) avanzar(); 
     }
-  }, [archivos, currentItem, transmisionIniciada]);
-  // =====================================================================
+  }, [archivos, currentItem, transmisionIniciada, isEspejo]);
 
   // Controles
   const iniciarTransmisionManual = () => {
@@ -220,11 +235,12 @@ export default function PantallaGigante() {
   };
 
   const itemsParaPrecargar = useMemo(() => {
+    if (isEspejo) return []; // El esclavo no gasta memoria precargando
     const lista = [];
     if (interrupciones.length > 0) lista.push(...interrupciones);
     if (colaReproduccion.length > 0) lista.push(...colaReproduccion.slice(0, 2));
     return lista.filter((item, index, self) => index === self.findIndex((t) => t.id === item.id)); 
-  }, [interrupciones, colaReproduccion]);
+  }, [interrupciones, colaReproduccion, isEspejo]);
 
   if (cargando) return <div className="min-h-screen bg-black flex items-center justify-center text-white/50 text-2xl tracking-widest uppercase">Conectando...</div>;
   if (archivos.length === 0) return <div className="min-h-screen bg-black flex items-center justify-center text-white/50 text-2xl tracking-widest uppercase">Esperando contenido...</div>;
@@ -235,15 +251,13 @@ export default function PantallaGigante() {
       onMouseMove={() => { setShowControls(true); clearTimeout(window.controlsTimeout); window.controlsTimeout = setTimeout(() => setShowControls(false), 3000); }}
     >
       
-      <div style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 0, height: 0, overflow: 'hidden', zIndex: -100 }}>
-        {itemsParaPrecargar.map(item => (
-          item.tipo === 'video' ? (
-             <video key={`buf-${item.id}`} src={item.url} preload="auto" muted />
-          ) : (
-             <img key={`buf-${item.id}`} src={item.url} alt="preload" />
-          )
-        ))}
-      </div>
+      {!isEspejo && (
+        <div style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 0, height: 0, overflow: 'hidden', zIndex: -100 }}>
+          {itemsParaPrecargar.map(item => (
+            item.tipo === 'video' ? <video key={`buf-${item.id}`} src={item.url} preload="auto" muted /> : <img key={`buf-${item.id}`} src={item.url} alt="preload" />
+          ))}
+        </div>
+      )}
 
       {!transmisionIniciada && (
         <div className="absolute inset-0 z-[200] flex flex-col items-center justify-center bg-zinc-900 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-zinc-800 to-black text-white">
@@ -286,7 +300,7 @@ export default function PantallaGigante() {
                    {currentItem.tipo === 'video' ? (
                     <video src={currentItem.url} autoPlay muted={!audioHabilitado} playsInline onEnded={avanzar} onError={avanzar} className="w-full h-full object-contain drop-shadow-[0_20px_50px_rgba(0,0,0,0.7)] rounded-3xl border border-white/10" />
                   ) : (
-				  <img src={currentItem.url} className="w-full h-full object-contain drop-shadow-[0_20px_50px_rgba(0,0,0,0.7)] rounded-3xl border border-white/10" />
+                    <img src={currentItem.url} className="w-full h-full object-contain drop-shadow-[0_20px_50px_rgba(0,0,0,0.7)] rounded-3xl border border-white/10" />
                   )}
 
                   <div className="absolute bottom-6 right-6 flex items-center gap-4 bg-black/40 backdrop-blur-xl px-6 py-3 rounded-full border border-white/10 shadow-2xl">
@@ -314,20 +328,18 @@ export default function PantallaGigante() {
             )}
           </div>
 
-          <div className={`absolute bottom-10 left-10 z-50 flex gap-4 transition-opacity duration-500 ${showControls ? 'opacity-100' : 'opacity-0'}`}>
-            <button onClick={() => setIsPaused(!isPaused)} className="w-16 h-16 bg-white/10 backdrop-blur-lg border border-white/20 rounded-full flex items-center justify-center text-white hover:bg-white/20 transition shadow-xl" title={isPaused ? "Reanudar" : "Pausar"}>
+          {/* Ocultamos los botones flotantes de play/pause en el monitor esclavo */}
+          <div className={`absolute bottom-10 left-10 z-50 flex gap-4 transition-opacity duration-500 ${(showControls && !isEspejo) ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+            <button onClick={() => setIsPaused(!isPaused)} className="w-16 h-16 bg-white/10 backdrop-blur-lg border border-white/20 rounded-full flex items-center justify-center text-white hover:bg-white/20 transition shadow-xl">
               {isPaused ? <span className="text-3xl pl-1">▶</span> : <span className="text-3xl font-black">II</span>}
             </button>
-            
-            <button onClick={() => setAudioHabilitado(!audioHabilitado)} className={`w-16 h-16 backdrop-blur-lg border rounded-full flex items-center justify-center text-white transition shadow-xl ${audioHabilitado ? 'bg-blue-600/60 border-blue-400 hover:bg-blue-500/80' : 'bg-white/10 border-white/20 hover:bg-white/20'}`} title={audioHabilitado ? "Silenciar" : "Activar Sonido"}>
+            <button onClick={() => setAudioHabilitado(!audioHabilitado)} className={`w-16 h-16 backdrop-blur-lg border rounded-full flex items-center justify-center text-white transition shadow-xl ${audioHabilitado ? 'bg-blue-600/60 border-blue-400' : 'bg-white/10 border-white/20'}`}>
               {audioHabilitado ? <span className="text-2xl">🔊</span> : <span className="text-2xl">🔇</span>}
             </button>
-
-            <button onClick={reiniciar} className="px-8 h-16 bg-red-600/80 backdrop-blur-lg border border-red-400/50 rounded-full flex items-center justify-center text-white font-bold tracking-widest hover:bg-red-500/80 transition shadow-xl">
-              REINICIAR TRANSMISIÓN
+            <button onClick={reiniciar} className="px-8 h-16 bg-red-600/80 backdrop-blur-lg border border-red-400/50 rounded-full flex items-center justify-center text-white font-bold tracking-widest shadow-xl">
+              REINICIAR
             </button>
-            
-            <button onClick={toggleFullscreen} className="w-16 h-16 bg-white/10 backdrop-blur-lg border border-white/20 rounded-full flex items-center justify-center text-white hover:bg-white/20 transition shadow-xl" title="Pantalla Completa">
+            <button onClick={toggleFullscreen} className="w-16 h-16 bg-white/10 backdrop-blur-lg border border-white/20 rounded-full flex items-center justify-center text-white shadow-xl">
               <span className="text-2xl">⛶</span>
             </button>
           </div>
