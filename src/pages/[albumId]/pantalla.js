@@ -156,6 +156,7 @@ export default function PantallaGigante() {
     return () => clearInterval(watchdog);
   }, [currentItem, transmisionIniciada, isPaused, isEspejo]);
 
+  
   // =====================================================================
   // 6. EL CEREBRO HÍBRIDO (Maestro vs Esclavo)
   // =====================================================================
@@ -169,9 +170,9 @@ export default function PantallaGigante() {
         if (docSnap.exists()) {
           const data = docSnap.data();
           if (data.tv) {
-            setTransmisionIniciada(!data.tv.lobby); // Copio el estado del lobby
-            setCurrentItem(data.tv.actual || null); // Copio la foto exacta
-            setAudioHabilitado(false); // SILENCIO MODO ESCLAVO para que no haga eco
+            setTransmisionIniciada(!data.tv.lobby);
+            setCurrentItem(data.tv.actual || null);
+            setAudioHabilitado(false);
           }
         }
       });
@@ -179,7 +180,7 @@ export default function PantallaGigante() {
 
     } else {
       // --- SI SOY LA TV GIGANTE (MAESTRO) ---
-      // Escribo en Firebase lo que estoy haciendo
+      // Escribo en Firebase lo que estoy haciendo y MI COLA.
       const reportarEstado = async () => {
         try {
           const estadoTV = {
@@ -192,6 +193,7 @@ export default function PantallaGigante() {
               comentarios: currentItem.comentarios || [],
               likesArray: currentItem.likesArray || []
             } : null,
+            // AQUÍ: Solo el maestro manda la cola.
             cola: colaReproduccion.slice(0, 5).map(item => ({ 
               id: item.id || 'sin-id', 
               url: item.url || '', 
@@ -202,10 +204,13 @@ export default function PantallaGigante() {
           await updateDoc(doc(db, 'albums', albumId), { tv: estadoTV });
         } catch (error) { console.error("Error al transmitir estado", error); }
       };
+      
+      // Enviamos el reporte cada vez que cambia la foto actual o la cola
       reportarEstado();
     }
   }, [currentItem, colaReproduccion, transmisionIniciada, albumId, isEspejo]);
-
+  
+  
   // 7. KILL-SWITCH (Cortado si es espejo)
   useEffect(() => {
     if (isEspejo) return;

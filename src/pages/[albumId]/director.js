@@ -5,6 +5,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { useAuthContext } from '../../context/AuthContext';
 import PanelStream from '../../components/director/PanelStream';
 import MonitorTV from '../../components/director/MonitorTV'; 
+import Carrete from '../../components/director/Carrete';
 
 export default function PanelDirector() {
   const router = useRouter();
@@ -50,22 +51,14 @@ export default function PanelDirector() {
       </header>
 
       <main className="flex-1 p-4 flex flex-col gap-4">
-        {/* Carrete (Aún es un mockup, lo haremos componente pronto) */}
-        <section className="bg-zinc-900 rounded-2xl border border-zinc-800 p-4 h-64 flex flex-col">
-           <h2 className="text-sm font-bold text-zinc-400 mb-2 uppercase tracking-widest">Carrete de Publicaciones</h2>
-           <div className="flex-1 border border-dashed border-zinc-700 rounded-xl flex items-center justify-center text-zinc-600">Aquí irá el componente de moderación</div>
-        </section>
+        
+        {/* EL CARRETE DE MODERACIÓN REAL */}
+        <Carrete albumId={albumId} />
 
         {/* Monitores y controles */}
         <div className="flex-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 h-96">
-            
-            {/* 1. MONITOR TV REAL */}
             <MonitorTV albumId={albumId} />
-
-            {/* 2. NUESTRO NUEVO COMPONENTE DE STREAMING */}
             <PanelStream />
-
-            {/* 3. Botonera (Próximo componente) */}
             <section className="bg-zinc-900 rounded-2xl border border-zinc-800 p-4 flex flex-col h-full">
                 <h2 className="text-sm font-bold text-zinc-400 mb-2 uppercase tracking-widest">Botonera Master</h2>
                 <div className="flex-1 border border-dashed border-zinc-700 rounded-xl flex items-center justify-center text-zinc-600 text-sm">Aquí irá BotoneraMaster.js</div>
