@@ -17,7 +17,16 @@ export default function PanelDirector() {
   const [accesoDenegado, setAccesoDenegado] = useState(false);
 
   useEffect(() => {
-    if (!albumId || !usuario) return;
+    if (!albumId) return; // Esperamos a que la URL cargue
+
+    // EL BUG ESTABA AQUÍ: Si el usuario no tiene sesión (ej: incógnito), 
+    // le denegamos el acceso y APAGAMOS la pantalla de carga.
+    if (!usuario) {
+      setAccesoDenegado(true);
+      setCargando(false);
+      return;
+    }
+
     const verificarAcceso = async () => {
       try {
         const docRef = doc(db, 'albums', albumId);
@@ -37,7 +46,14 @@ export default function PanelDirector() {
   }, [albumId, usuario]);
 
   if (cargando) return <div className="min-h-screen bg-zinc-950 text-white flex items-center justify-center">Cargando Panel de Control...</div>;
-  if (accesoDenegado || !usuario) return <div className="min-h-screen bg-zinc-950 text-white flex flex-col items-center justify-center p-6 text-center"><h1 className="text-2xl font-bold mb-2">Acceso Denegado</h1></div>;
+  
+  if (accesoDenegado || !usuario) return (
+    <div className="min-h-screen bg-zinc-950 text-white flex flex-col items-center justify-center p-6 text-center">
+      <h1 className="text-2xl font-bold mb-2">Acceso Denegado</h1>
+      <p className="text-zinc-500 text-sm mb-6">Debes iniciar sesión con la cuenta de administrador para ver el Panel.</p>
+      <button onClick={() => router.push(`/${albumId}`)} className="bg-blue-600 px-6 py-2 rounded-lg font-bold">Volver al Muro</button>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white font-sans flex flex-col">
@@ -59,8 +75,6 @@ export default function PanelDirector() {
         <div className="flex-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 h-96">
             <MonitorTV albumId={albumId} />
             <PanelStream />
-            
-            {/* LA BOTONERA REAL */}
             <BotoneraMaster albumId={albumId} />
         </div>
       </main>
