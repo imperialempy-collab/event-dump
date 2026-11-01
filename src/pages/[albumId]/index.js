@@ -23,6 +23,29 @@ export default function MuroEvento() {
 
   const muroInputRef = useRef(null);
 
+// =========================================================
+  // DEEP LINKING: Detector de QR Automático
+  // =========================================================
+  useEffect(() => {
+    // Verificamos si la URL trae la orden secreta "?accion=subir"
+    if (router.query.accion === 'subir' && muroInputRef.current) {
+      
+      // Le damos 800 milisegundos de retraso. Esto es CRÍTICO porque los 
+      // navegadores de celular necesitan terminar de cargar la vista 
+      // antes de abrir la cámara, o de lo contrario lo bloquean.
+      const timer = setTimeout(() => {
+        muroInputRef.current.click(); // Simulamos el clic físico
+        
+        // Limpiamos la URL silenciosamente para que, si el invitado recarga 
+        // la página por error, no se le vuelva a abrir la cámara sola.
+        router.replace(`/${albumId}`, undefined, { shallow: true });
+      }, 800);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [router.query.accion, albumId]);
+  // =========================================================
+
   const [archivoEditando, setArchivoEditando] = useState(null); 
   const [mostrarCajaComentario, setMostrarCajaComentario] = useState(false);
 
