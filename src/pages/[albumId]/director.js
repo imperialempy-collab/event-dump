@@ -1,12 +1,11 @@
 import { useRouter } from 'next/router';
 import { useState, useEffect } from 'react';
 import { db } from '../../firebase/config';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot, updateDoc } from 'firebase/firestore'; 
 import { useAuthContext } from '../../context/AuthContext';
 import PanelStream from '../../components/director/PanelStream';
 import MonitorTV from '../../components/director/MonitorTV'; 
 import Carrete from '../../components/director/Carrete';
-import BotoneraMaster from '../../components/director/BotoneraMaster';
 
 export default function PanelDirector() {
   const router = useRouter();
@@ -15,18 +14,17 @@ export default function PanelDirector() {
   const [album, setAlbum] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [accesoDenegado, setAccesoDenegado] = useState(false);
+  
+  // ESTADO DEL QR INTEGRADO DIRECTAMENTE AQUÍ
+  const [mostrarQR, setMostrarQR] = useState(false);
 
   useEffect(() => {
-    if (!albumId) return; // Esperamos a que la URL cargue
-
-    // EL BUG ESTABA AQUÍ: Si el usuario no tiene sesión (ej: incógnito), 
-    // le denegamos el acceso y APAGAMOS la pantalla de carga.
+    if (!albumId) return;
     if (!usuario) {
       setAccesoDenegado(true);
       setCargando(false);
       return;
     }
-
     const verificarAcceso = async () => {
       try {
         const docRef = doc(db, 'albums', albumId);
@@ -45,15 +43,30 @@ export default function PanelDirector() {
     verificarAcceso();
   }, [albumId, usuario]);
 
+  // ESCUCHADOR DEL QR INTEGRADO AL PANEL
+  useEffect(() => {
+    if (!albumId) return;
+    const unsubscribe = onSnapshot(doc(db, 'albums', albumId), (docSnap) => {
+      if (docSnap.exists() && docSnap.data().comandosTV) {
+        setMostrarQR(docSnap.data().comandosTV.mostrarQR || false);
+      }
+    });
+    return () => unsubscribe();
+  }, [albumId]);
+
+  // FUNCIÓN DEL BOTÓN INTEGRADA
+  const toggleQR = async () => {
+    try {
+      await updateDoc(doc(db, 'albums', albumId), {
+        'comandosTV.mostrarQR': !mostrarQR
+      });
+    } catch (error) {
+      console.error("Error al actualizar QR:", error);
+    }
+  };
+
   if (cargando) return <div className="min-h-screen bg-zinc-950 text-white flex items-center justify-center">Cargando Panel de Control...</div>;
-  
-  if (accesoDenegado || !usuario) return (
-    <div className="min-h-screen bg-zinc-950 text-white flex flex-col items-center justify-center p-6 text-center">
-      <h1 className="text-2xl font-bold mb-2">Acceso Denegado</h1>
-      <p className="text-zinc-500 text-sm mb-6">Debes iniciar sesión con la cuenta de administrador para ver el Panel.</p>
-      <button onClick={() => router.push(`/${albumId}`)} className="bg-blue-600 px-6 py-2 rounded-lg font-bold">Volver al Muro</button>
-    </div>
-  );
+  if (accesoDenegado || !usuario) return <div className="min-h-screen bg-zinc-950 text-white flex flex-col items-center justify-center p-6 text-center"><h1 className="text-2xl font-bold mb-2">Acceso Denegado</h1></div>;
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white font-sans flex flex-col">
@@ -69,13 +82,29 @@ export default function PanelDirector() {
 
       <main className="flex-1 p-4 flex flex-col gap-4">
         
+<<<<<<< HEAD
         {/* EL CARRETE DE MODERACIÓN REAL */}
+=======
+        {/* BOTÓN BRUTO Y DIRECTO PARA PROBAR LA LÓGICA */}
+        <div className="bg-zinc-900 p-4 rounded-2xl border-2 border-dashed border-red-500 flex justify-between items-center shadow-lg">
+          <div>
+            <h2 className="font-bold text-red-400 text-lg">PROYECTOR DE QR</h2>
+            <p className="text-xs text-zinc-400 mt-1">Botón directo sin subcomponentes.</p>
+          </div>
+          <button 
+            onClick={toggleQR}
+            className={`px-8 py-3 rounded-xl font-black tracking-widest text-white shadow-xl transition-all active:scale-95 ${mostrarQR ? 'bg-red-600 hover:bg-red-500' : 'bg-blue-600 hover:bg-blue-500'}`}
+          >
+            {mostrarQR ? 'APAGAR QR' : 'ENCENDER QR'}
+          </button>
+        </div>
+        
+>>>>>>> panel-director
         <Carrete albumId={albumId} />
 
-        <div className="flex-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 h-96">
+        <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 h-96">
             <MonitorTV albumId={albumId} />
             <PanelStream />
-            <BotoneraMaster albumId={albumId} />
         </div>
       </main>
     </div>
