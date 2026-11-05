@@ -15,7 +15,6 @@ export default function PanelDirector() {
   const [cargando, setCargando] = useState(true);
   const [accesoDenegado, setAccesoDenegado] = useState(false);
   
-  // ESTADO DEL QR INTEGRADO DIRECTAMENTE AQUÍ
   const [mostrarQR, setMostrarQR] = useState(false);
 
   useEffect(() => {
@@ -43,7 +42,6 @@ export default function PanelDirector() {
     verificarAcceso();
   }, [albumId, usuario]);
 
-  // ESCUCHADOR DEL QR INTEGRADO AL PANEL
   useEffect(() => {
     if (!albumId) return;
     const unsubscribe = onSnapshot(doc(db, 'albums', albumId), (docSnap) => {
@@ -54,7 +52,6 @@ export default function PanelDirector() {
     return () => unsubscribe();
   }, [albumId]);
 
-  // FUNCIÓN DEL BOTÓN INTEGRADA
   const toggleQR = async () => {
     try {
       await updateDoc(doc(db, 'albums', albumId), {
@@ -82,10 +79,6 @@ export default function PanelDirector() {
 
       <main className="flex-1 p-4 flex flex-col gap-4">
         
-<<<<<<< HEAD
-        {/* EL CARRETE DE MODERACIÓN REAL */}
-=======
-        {/* BOTÓN BRUTO Y DIRECTO PARA PROBAR LA LÓGICA */}
         <div className="bg-zinc-900 p-4 rounded-2xl border-2 border-dashed border-red-500 flex justify-between items-center shadow-lg">
           <div>
             <h2 className="font-bold text-red-400 text-lg">PROYECTOR DE QR</h2>
@@ -99,7 +92,6 @@ export default function PanelDirector() {
           </button>
         </div>
         
->>>>>>> panel-director
         <Carrete albumId={albumId} />
 
         <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 h-96">
