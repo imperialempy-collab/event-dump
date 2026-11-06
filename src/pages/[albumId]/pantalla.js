@@ -39,11 +39,6 @@ const ParticulasFondo = () => {
 
 export default function PantallaGigante() {
   const router = useRouter();
-<<<<<<< HEAD
-  
-  // EL SWITCH MAESTRO: ¿Soy la TV real o soy el cuadrito del director?
-=======
->>>>>>> panel-director
   const { albumId, espejo } = router.query;
   const isEspejo = espejo === 'true'; 
   
@@ -61,7 +56,6 @@ export default function PantallaGigante() {
   const [audioHabilitado, setAudioHabilitado] = useState(true);
   const [showControls, setShowControls] = useState(false);
 
-  // NUEVO: Estados para leer la Botonera y generar el link del QR
   const [comandosTV, setComandosTV] = useState({ mostrarQR: false });
   const [enlaceMagico, setEnlaceMagico] = useState('');
 
@@ -69,10 +63,6 @@ export default function PantallaGigante() {
   const timerRef = useRef(null);
   const latestArchivosRef = useRef([]);
 
-<<<<<<< HEAD
-  // 1. Escuchar archivos (Ignora los ocultados)
-=======
-  // NUEVO: Escuchar órdenes directas de la Botonera (Independiente de si es espejo o no)
   useEffect(() => {
     if (!albumId) return;
     if (typeof window !== 'undefined') {
@@ -90,7 +80,6 @@ export default function PantallaGigante() {
     return () => unsubscribe();
   }, [albumId]);
 
->>>>>>> panel-director
   useEffect(() => {
     if (!albumId) return;
     const q = query(collection(db, 'albums', albumId, 'fotos'), orderBy('creadoEn', 'desc'));
@@ -126,16 +115,9 @@ export default function PantallaGigante() {
     return [...ranking, ...muro];
   };
 
-<<<<<<< HEAD
-  // Lobby inicial (Cortado si es espejo)
-  useEffect(() => {
-    if (isEspejo) {
-      setPreparandoBuffer(false); // El espejo no prepara buffers, solo copia
-=======
   useEffect(() => {
     if (isEspejo) {
       setPreparandoBuffer(false); 
->>>>>>> panel-director
       return;
     }
     if (archivos.length > 0 && colaReproduccion.length === 0 && !currentItem) {
@@ -145,14 +127,8 @@ export default function PantallaGigante() {
     }
   }, [archivos, isEspejo]);
 
-<<<<<<< HEAD
-  // 3. Motor de avance (Cortado si es espejo)
-  const avanzar = () => {
-    if (isEspejo) return; // El esclavo no avanza por su cuenta
-=======
   const avanzar = () => {
     if (isEspejo) return; 
->>>>>>> panel-director
 
     let nextItem = null;
     let nuevaCola = [...colaReproduccion];
@@ -174,10 +150,6 @@ export default function PantallaGigante() {
     setCurrentItem(nextItem);
   };
 
-<<<<<<< HEAD
-  // 4. Temporizador Automático (Cortado si es espejo)
-=======
->>>>>>> panel-director
   useEffect(() => {
     if (isEspejo || !transmisionIniciada) return;
     if (!currentItem && archivos.length > 0) { avanzar(); return; }
@@ -188,10 +160,6 @@ export default function PantallaGigante() {
     return () => clearTimeout(timerRef.current);
   }, [currentItem, isPaused, interrupciones, archivos.length, transmisionIniciada, isEspejo]);
   
-<<<<<<< HEAD
-  // 5. Watchdog (Cortado si es espejo)
-=======
->>>>>>> panel-director
   useEffect(() => {
     if (isEspejo || !transmisionIniciada || isPaused) return;
     const watchdog = setInterval(() => {
@@ -200,65 +168,6 @@ export default function PantallaGigante() {
     return () => clearInterval(watchdog);
   }, [currentItem, transmisionIniciada, isPaused, isEspejo]);
 
-<<<<<<< HEAD
-  
-  // =====================================================================
-  // 6. EL CEREBRO HÍBRIDO (Maestro vs Esclavo)
-  // =====================================================================
-  useEffect(() => {
-    if (!albumId) return;
-
-    if (isEspejo) {
-      // --- SI SOY EL ESPEJO (ESCLAVO) ---
-      // Solo escucho a Firebase y copio todo lo que hace la TV
-      const unsubscribe = onSnapshot(doc(db, 'albums', albumId), (docSnap) => {
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          if (data.tv) {
-            setTransmisionIniciada(!data.tv.lobby);
-            setCurrentItem(data.tv.actual || null);
-            setAudioHabilitado(false);
-          }
-        }
-      });
-      return () => unsubscribe();
-
-    } else {
-      // --- SI SOY LA TV GIGANTE (MAESTRO) ---
-      // Escribo en Firebase lo que estoy haciendo y MI COLA.
-      const reportarEstado = async () => {
-        try {
-          const estadoTV = {
-            lobby: !transmisionIniciada,
-            actual: currentItem ? { 
-              id: currentItem.id || 'sin-id', 
-              url: currentItem.url || '', 
-              tipo: currentItem.tipo || 'imagen', 
-              subidoPorNombre: currentItem.subidoPorNombre || 'Invitado',
-              comentarios: currentItem.comentarios || [],
-              likesArray: currentItem.likesArray || []
-            } : null,
-            // AQUÍ: Solo el maestro manda la cola.
-            cola: colaReproduccion.slice(0, 5).map(item => ({ 
-              id: item.id || 'sin-id', 
-              url: item.url || '', 
-              tipo: item.tipo || 'imagen', 
-              subidoPorNombre: item.subidoPorNombre || 'Invitado' 
-            }))
-          };
-          await updateDoc(doc(db, 'albums', albumId), { tv: estadoTV });
-        } catch (error) { console.error("Error al transmitir estado", error); }
-      };
-      
-      // Enviamos el reporte cada vez que cambia la foto actual o la cola
-      reportarEstado();
-    }
-  }, [currentItem, colaReproduccion, transmisionIniciada, albumId, isEspejo]);
-  
-  
-  // 7. KILL-SWITCH (Cortado si es espejo)
-  useEffect(() => {
-=======
   useEffect(() => {
     if (!albumId) return;
 
@@ -303,7 +212,6 @@ export default function PantallaGigante() {
   }, [currentItem, colaReproduccion, transmisionIniciada, albumId, isEspejo]);
 
   useEffect(() => {
->>>>>>> panel-director
     if (isEspejo) return;
     if (currentItem && transmisionIniciada) {
       const fotoAunExiste = archivos.some(a => a.id === currentItem.id);
@@ -330,11 +238,7 @@ export default function PantallaGigante() {
   };
 
   const itemsParaPrecargar = useMemo(() => {
-<<<<<<< HEAD
-    if (isEspejo) return []; // El esclavo no gasta memoria precargando
-=======
     if (isEspejo) return []; 
->>>>>>> panel-director
     const lista = [];
     if (interrupciones.length > 0) lista.push(...interrupciones);
     if (colaReproduccion.length > 0) lista.push(...colaReproduccion.slice(0, 2));
@@ -427,18 +331,11 @@ export default function PantallaGigante() {
             )}
           </div>
 
-<<<<<<< HEAD
-          {/* Ocultamos los botones flotantes de play/pause en el monitor esclavo */}
-          <div className={`absolute bottom-10 left-10 z-50 flex gap-4 transition-opacity duration-500 ${(showControls && !isEspejo) ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
-=======
-          {/* ========================================================= */}
-          {/* EL CÓDIGO QR MÁGICO (Visible si el Director lo ordena) */}
-          {/* ========================================================= */}
           {comandosTV.mostrarQR && (
             <div className="absolute bottom-10 left-10 z-[150] bg-white p-3 pt-4 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex flex-col items-center gap-2 animate-fade-in hover:scale-105 transition-transform">
               <img 
                 src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(enlaceMagico)}`} 
-                alt="QR Code de Acceso Directo" 
+                alt="QR Code" 
                 className="w-36 h-36 object-contain rounded-xl"
               />
               <p className="text-black font-black uppercase tracking-widest text-center text-xs leading-tight mt-1 px-2">
@@ -448,9 +345,7 @@ export default function PantallaGigante() {
             </div>
           )}
 
-          {/* Ocultamos los botones flotantes de play/pause en el monitor esclavo */}
           <div className={`absolute bottom-10 left-10 z-50 flex gap-4 transition-opacity duration-500 ${(showControls && !isEspejo && !comandosTV.mostrarQR) ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
->>>>>>> panel-director
             <button onClick={() => setIsPaused(!isPaused)} className="w-16 h-16 bg-white/10 backdrop-blur-lg border border-white/20 rounded-full flex items-center justify-center text-white hover:bg-white/20 transition shadow-xl">
               {isPaused ? <span className="text-3xl pl-1">▶</span> : <span className="text-3xl font-black">II</span>}
             </button>
