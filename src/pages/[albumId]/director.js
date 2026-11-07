@@ -14,7 +14,7 @@ export default function PanelDirector() {
   
   const [mostrarQR, setMostrarQR] = useState(false);
 
-  // 1. CARGA LIBRE DE 芍LBUM (Sin candados de sesi車n)
+  // 1. CARGA LIBRE DE ALBUM
   useEffect(() => {
     if (!albumId) return;
 
@@ -27,7 +27,7 @@ export default function PanelDirector() {
           setAlbum(docSnap.data());
         }
       } catch (error) {
-        console.error("Error al cargar el 芍lbum:", error);
+        console.error("Error al cargar el album:", error);
       } finally {
         setCargando(false);
       }
@@ -35,7 +35,7 @@ export default function PanelDirector() {
     cargarAlbum();
   }, [albumId]);
   
-  // 2. ESCUCHADOR DEL BOT車N QR (Intacto)
+  // 2. ESCUCHADOR DEL BOTON QR
   useEffect(() => {
     if (!albumId) return;
     const unsubscribe = onSnapshot(doc(db, 'albums', albumId), (docSnap) => {
@@ -46,7 +46,7 @@ export default function PanelDirector() {
     return () => unsubscribe();
   }, [albumId]);
 
-  // 3. ACTUALIZADOR DE LA BASE DE DATOS (Intacto)
+  // 3. ACTUALIZADOR DE LA BASE DE DATOS
   const toggleQR = async () => {
     try {
       await updateDoc(doc(db, 'albums', albumId), {
@@ -66,16 +66,16 @@ export default function PanelDirector() {
     );
   }
 
-  if (!album) return <div className="min-h-screen bg-zinc-950 text-white flex flex-col items-center justify-center p-6 text-center"><h1 className="text-2xl font-bold mb-2">芍lbum no encontrado</h1></div>;
+  if (!album) return <div className="min-h-screen bg-zinc-950 text-white flex flex-col items-center justify-center p-6 text-center"><h1 className="text-2xl font-bold mb-2">Album no encontrado</h1></div>;
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white font-sans flex flex-col">
       <header className="bg-black border-b border-zinc-800 p-4 flex justify-between items-center z-10">
         <div className="flex items-center gap-4">
-          <button onClick={() => router.push(`/${albumId}`)} className="w-10 h-10 bg-zinc-900 rounded-full flex items-center justify-center text-zinc-400 hover:text-white transition">↘</button>
+          <button onClick={() => router.push(`/${albumId}`)} className="px-4 h-10 bg-zinc-900 rounded-full flex items-center justify-center text-zinc-400 hover:text-white transition font-bold text-xs tracking-widest">VOLVER</button>
           <div>
-            <h1 className="text-lg font-bold text-white leading-tight">Panel de Producci車n</h1>
-            <p className="text-xs text-green-400">Modo Director (100% Libre) ? {album.nombreEvento}</p>
+            <h1 className="text-lg font-bold text-white leading-tight">Panel de Produccion</h1>
+            <p className="text-xs text-green-400">Modo Director (100% Libre) - {album.nombreEvento}</p>
           </div>
         </div>
       </header>
@@ -85,7 +85,7 @@ export default function PanelDirector() {
         <div className="bg-zinc-900 p-4 rounded-2xl border-2 border-dashed border-red-500 flex justify-between items-center shadow-lg">
           <div>
             <h2 className="font-bold text-red-400 text-lg">PROYECTOR DE QR</h2>
-            <p className="text-xs text-zinc-400 mt-1">Bot車n directo para controlar la TV.</p>
+            <p className="text-xs text-zinc-400 mt-1">Boton directo para controlar la TV.</p>
           </div>
           <button 
             onClick={toggleQR}
