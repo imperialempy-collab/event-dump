@@ -2,7 +2,6 @@ import { useRouter } from 'next/router';
 import { useState, useEffect } from 'react';
 import { db } from '../../firebase/config';
 import { doc, getDoc, onSnapshot, updateDoc } from 'firebase/firestore'; 
-import { useAuthContext } from '../../context/AuthContext';
 import PanelStream from '../../components/director/PanelStream';
 import MonitorTV from '../../components/director/MonitorTV'; 
 import Carrete from '../../components/director/Carrete';
@@ -10,38 +9,33 @@ import Carrete from '../../components/director/Carrete';
 export default function PanelDirector() {
   const router = useRouter();
   const { albumId } = router.query;
-  const { usuario } = useAuthContext();
   const [album, setAlbum] = useState(null);
   const [cargando, setCargando] = useState(true);
-  const [accesoDenegado, setAccesoDenegado] = useState(false);
   
   const [mostrarQR, setMostrarQR] = useState(false);
 
+  // 1. CARGA LIBRE DE ®¢LBUM (Sin candados de sesi®Æn)
   useEffect(() => {
     if (!albumId) return;
-    if (!usuario) {
-      setAccesoDenegado(true);
-      setCargando(false);
-      return;
-    }
-    const verificarAcceso = async () => {
+
+    const cargarAlbum = async () => {
       try {
         const docRef = doc(db, 'albums', albumId);
         const docSnap = await getDoc(docRef);
-        if (docSnap.exists() && docSnap.data().adminId === usuario.uid) {
+        
+        if (docSnap.exists()) {
           setAlbum(docSnap.data());
-        } else {
-          setAccesoDenegado(true);
         }
       } catch (error) {
-        setAccesoDenegado(true);
+        console.error("Error al cargar el ®¢lbum:", error);
       } finally {
         setCargando(false);
       }
     };
-    verificarAcceso();
-  }, [albumId, usuario]);
-
+    cargarAlbum();
+  }, [albumId]);
+  
+  // 2. ESCUCHADOR DEL BOT®ÆN QR (Intacto)
   useEffect(() => {
     if (!albumId) return;
     const unsubscribe = onSnapshot(doc(db, 'albums', albumId), (docSnap) => {
@@ -52,6 +46,7 @@ export default function PanelDirector() {
     return () => unsubscribe();
   }, [albumId]);
 
+  // 3. ACTUALIZADOR DE LA BASE DE DATOS (Intacto)
   const toggleQR = async () => {
     try {
       await updateDoc(doc(db, 'albums', albumId), {
@@ -62,17 +57,25 @@ export default function PanelDirector() {
     }
   };
 
-  if (cargando) return <div className="min-h-screen bg-zinc-950 text-white flex items-center justify-center">Cargando Panel de Control...</div>;
-  if (accesoDenegado || !usuario) return <div className="min-h-screen bg-zinc-950 text-white flex flex-col items-center justify-center p-6 text-center"><h1 className="text-2xl font-bold mb-2">Acceso Denegado</h1></div>;
+  if (cargando) {
+    return (
+      <div className="min-h-screen bg-zinc-950 text-zinc-400 flex flex-col items-center justify-center text-sm font-bold tracking-widest uppercase">
+        <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
+        Cargando Panel Libre...
+      </div>
+    );
+  }
+
+  if (!album) return <div className="min-h-screen bg-zinc-950 text-white flex flex-col items-center justify-center p-6 text-center"><h1 className="text-2xl font-bold mb-2">®¢lbum no encontrado</h1></div>;
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white font-sans flex flex-col">
       <header className="bg-black border-b border-zinc-800 p-4 flex justify-between items-center z-10">
         <div className="flex items-center gap-4">
-          <button onClick={() => router.push(`/${albumId}`)} className="w-10 h-10 bg-zinc-900 rounded-full flex items-center justify-center text-zinc-400 hover:text-white transition">‚Üê</button>
+          <button onClick={() => router.push(`/${albumId}`)} className="w-10 h-10 bg-zinc-900 rounded-full flex items-center justify-center text-zinc-400 hover:text-white transition">°˚</button>
           <div>
-            <h1 className="text-lg font-bold text-white leading-tight">Panel de Producci√≥n</h1>
-            <p className="text-xs text-zinc-400">Modo Director ‚Ä¢ {album.nombreEvento}</p>
+            <h1 className="text-lg font-bold text-white leading-tight">Panel de Producci®Æn</h1>
+            <p className="text-xs text-green-400">Modo Director (100% Libre) ? {album.nombreEvento}</p>
           </div>
         </div>
       </header>
@@ -82,7 +85,7 @@ export default function PanelDirector() {
         <div className="bg-zinc-900 p-4 rounded-2xl border-2 border-dashed border-red-500 flex justify-between items-center shadow-lg">
           <div>
             <h2 className="font-bold text-red-400 text-lg">PROYECTOR DE QR</h2>
-            <p className="text-xs text-zinc-400 mt-1">Bot√≥n directo para controlar la TV.</p>
+            <p className="text-xs text-zinc-400 mt-1">Bot®Æn directo para controlar la TV.</p>
           </div>
           <button 
             onClick={toggleQR}
