@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { auth, db } from '../../firebase/config';
+import { auth, db } from '../firebase/config';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore';
 
@@ -23,7 +23,7 @@ export default function ComandoAdmin() {
     return () => unsubscribe();
   }, []);
 
-  // 2. BUSCADOR DE USUARIOS EN LA BASE DE DATOS
+  // 2. BUSCADOR DE USUARIOS
   const buscarUsuario = async (e) => {
     e.preventDefault();
     setMensaje('Buscando...');
@@ -45,7 +45,7 @@ export default function ComandoAdmin() {
     }
   };
 
-  // 3. ACTUALIZAR PASES DE EVENTOS (SUMAR O RESTAR)
+  // 3. ACTUALIZAR PASES DE EVENTOS
   const actualizarCreditos = async (cantidad) => {
     if (!usuarioEncontrado) return;
     setMensaje('Actualizando creditos...');
@@ -63,7 +63,7 @@ export default function ComandoAdmin() {
     }
   };
 
-  // 4. CAMBIAR TIPO DE CUENTA (EVENTO PRIVADO <-> LOCAL SUSCRITO)
+  // 4. CAMBIAR TIPO DE CUENTA
   const toggleSuscripcionLocal = async () => {
     if (!usuarioEncontrado) return;
     setMensaje('Actualizando plan de la cuenta...');
@@ -114,7 +114,6 @@ export default function ComandoAdmin() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* MODULO DE EVENTOS */}
               <div className="bg-black p-5 rounded-xl border border-zinc-800">
                 <p className="text-zinc-500 text-xs font-bold tracking-widest mb-1">PASES DE EVENTO</p>
                 <p className="text-4xl font-black text-white">{usuarioEncontrado.creditosDisponibles || 0}</p>
@@ -125,7 +124,6 @@ export default function ComandoAdmin() {
                 </div>
               </div>
 
-              {/* MODULO DE LOCALES */}
               <div className={`p-5 rounded-xl border transition-all ${usuarioEncontrado.esLocalSuscrito ? 'bg-blue-900/20 border-blue-500' : 'bg-black border-zinc-800'}`}>
                 <p className="text-zinc-500 text-xs font-bold tracking-widest mb-1">TIPO DE CUENTA</p>
                 <p className={`text-lg font-black tracking-wide ${usuarioEncontrado.esLocalSuscrito ? 'text-blue-400' : 'text-zinc-300'}`}>
