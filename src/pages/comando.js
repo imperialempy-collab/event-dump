@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { auth, db } from '../firebase/config';
 import { onAuthStateChanged } from 'firebase/auth';
-import { collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, updateDoc, limit } from 'firebase/firestore';
 
 export default function ComandoAdmin() {
   const [adminLocal, setAdminLocal] = useState(null);
@@ -9,6 +9,9 @@ export default function ComandoAdmin() {
   const [emailBuscar, setEmailBuscar] = useState('');
   const [usuarioEncontrado, setUsuarioEncontrado] = useState(null);
   const [mensaje, setMensaje] = useState('');
+  
+  // NUEVO: Estado para la lista de usuarios
+  const [listaUsuarios, setListaUsuarios] = useState([]);
 
   // 1. SEGURIDAD: VERIFICAR QUE EL USUARIO ES EL DUEÑO
   useEffect(() => {
@@ -23,7 +26,29 @@ export default function ComandoAdmin() {
     return () => unsubscribe();
   }, []);
 
-  // 2. BUSCADOR DE USUARIOS
+  // 2. NUEVO: CARGAR ÚLTIMOS USUARIOS AUTOMÁTICAMENTE
+  useEffect(() => {
+    if (!adminLocal) return;
+
+    const cargarUsuarios = async () => {
+      try {
+        const q = query(collection(db, 'usuarios'), limit(20));
+        const querySnapshot = await getDocs(q);
+        
+        const usuariosTemp = [];
+        querySnapshot.forEach((doc) => {
+          usuariosTemp.push({ id: doc.id, ...doc.data() });
+        });
+        setListaUsuarios(usuariosTemp);
+      } catch (error) {
+        console.error("Error al cargar lista:", error);
+      }
+    };
+
+    cargarUsuarios();
+  }, [adminLocal]);
+
+  // 3. BUSCADOR MANUAL
   const buscarUsuario = async (e) => {
     e.preventDefault();
     setMensaje('Buscando...');
@@ -38,14 +63,14 @@ export default function ComandoAdmin() {
         setUsuarioEncontrado({ id: userDoc.id, ...userDoc.data() });
         setMensaje('Usuario encontrado.');
       } else {
-        setMensaje('Usuario no existe en la base de datos. Pidele que inicie sesion en la web por primera vez.');
+        setMensaje('Usuario no existe en la base de datos (Firestore).');
       }
     } catch (error) {
       setMensaje('Error al buscar: ' + error.message);
     }
   };
 
-  // 3. ACTUALIZAR PASES DE EVENTOS
+  // 4. ACTUALIZAR PASES DE EVENTOS
   const actualizarCreditos = async (cantidad) => {
     if (!usuarioEncontrado) return;
     setMensaje('Actualizando creditos...');
@@ -57,13 +82,16 @@ export default function ComandoAdmin() {
       await updateDoc(userRef, { creditosDisponibles: nuevosCreditos });
       
       setUsuarioEncontrado({ ...usuarioEncontrado, creditosDisponibles: nuevosCreditos });
+      
+      // Actualizar también en la lista visual
+      setListaUsuarios(listaUsuarios.map(u => u.id === usuarioEncontrado.id ? { ...u, creditosDisponibles: nuevosCreditos } : u));
       setMensaje('Creditos actualizados a: ' + nuevosCreditos);
     } catch (error) {
       setMensaje('Error: ' + error.message);
     }
   };
 
-  // 4. CAMBIAR TIPO DE CUENTA
+  // 5. CAMBIAR TIPO DE CUENTA
   const toggleSuscripcionLocal = async () => {
     if (!usuarioEncontrado) return;
     setMensaje('Actualizando plan de la cuenta...');
@@ -73,6 +101,9 @@ export default function ComandoAdmin() {
       await updateDoc(userRef, { esLocalSuscrito: nuevoEstado });
       
       setUsuarioEncontrado({ ...usuarioEncontrado, esLocalSuscrito: nuevoEstado });
+      
+      // Actualizar también en la lista visual
+      setListaUsuarios(listaUsuarios.map(u => u.id === usuarioEncontrado.id ? { ...u, esLocalSuscrito: nuevoEstado } : u));
       setMensaje(nuevoEstado ? 'Suscripcion Mensual de Local ACTIVADA' : 'Suscripcion de Local DESACTIVADA');
     } catch (error) {
       setMensaje('Error: ' + error.message);
@@ -80,7 +111,6 @@ export default function ComandoAdmin() {
   };
 
   if (cargando) return <div className="min-h-screen bg-black text-white flex items-center justify-center font-bold tracking-widest text-xs">VERIFICANDO IDENTIDAD...</div>;
-
   if (!adminLocal) return <div className="min-h-screen bg-black text-zinc-800 flex items-center justify-center font-bold tracking-widest text-xl">404 - NOT FOUND</div>;
 
   return (
@@ -97,7 +127,6 @@ export default function ComandoAdmin() {
               onChange={(e) => setEmailBuscar(e.target.value)}
               placeholder="correo.del.cliente@gmail.com" 
               className="flex-1 bg-black border border-zinc-700 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500"
-              required
             />
             <button type="submit" className="bg-blue-600 hover:bg-blue-500 px-6 py-3 rounded-xl font-bold transition-all tracking-widest text-sm">
               BUSCAR
@@ -106,8 +135,42 @@ export default function ComandoAdmin() {
           {mensaje && <p className="mt-4 text-xs font-bold text-yellow-500 tracking-wide uppercase">{mensaje}</p>}
         </div>
 
+        {/* NUEVO: LISTA DE USUARIOS RÁPIDA */}
+        {!usuarioEncontrado && listaUsuarios.length > 0 && (
+          <div className="bg-zinc-900 p-6 rounded-2xl border border-zinc-800 shadow-xl mb-6">
+            <h3 className="text-zinc-500 text-xs font-bold tracking-widest mb-4">ÚLTIMOS CLIENTES REGISTRADOS</h3>
+            <div className="flex flex-col gap-2">
+              {listaUsuarios.map((usuario) => (
+                <button 
+                  key={usuario.id}
+                  onClick={() => setUsuarioEncontrado(usuario)}
+                  className="flex justify-between items-center bg-black p-4 rounded-xl border border-zinc-800 hover:border-blue-500 transition text-left"
+                >
+                  <div>
+                    <p className="font-bold text-white text-sm">{usuario.nombre || 'Sin nombre'}</p>
+                    <p className="text-zinc-500 text-xs">{usuario.email}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs font-bold text-zinc-400">Pases: <span className="text-white">{usuario.creditosDisponibles || 0}</span></p>
+                    <p className="text-xs font-bold text-blue-400">{usuario.esLocalSuscrito ? 'LOCAL' : 'EVENTO'}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* TARJETA DE CONTROL (Se muestra al buscar o hacer clic en la lista) */}
         {usuarioEncontrado && (
-          <div className="bg-zinc-900 p-6 rounded-2xl border border-zinc-800 flex flex-col gap-6 shadow-xl animate-fade-in">
+          <div className="bg-zinc-900 p-6 rounded-2xl border border-zinc-800 flex flex-col gap-6 shadow-xl animate-fade-in relative">
+            
+            <button 
+              onClick={() => setUsuarioEncontrado(null)} 
+              className="absolute top-6 right-6 text-zinc-500 hover:text-white text-xs font-bold tracking-widest"
+            >
+              CERRAR X
+            </button>
+
             <div>
               <h2 className="text-xl font-bold text-white">{usuarioEncontrado.nombre || 'Usuario'}</h2>
               <p className="text-zinc-400 text-sm mt-1">{usuarioEncontrado.email}</p>
