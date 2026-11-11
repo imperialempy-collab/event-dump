@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { auth, db } from '../firebase/config';
 import { onAuthStateChanged } from 'firebase/auth';
-import { collection, query, where, getDocs, doc, updateDoc, limit } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, updateDoc, limit, onSnapshot } from 'firebase/firestore';
 
 export default function ComandoAdmin() {
   const [adminLocal, setAdminLocal] = useState(null);
@@ -9,11 +9,9 @@ export default function ComandoAdmin() {
   const [emailBuscar, setEmailBuscar] = useState('');
   const [usuarioEncontrado, setUsuarioEncontrado] = useState(null);
   const [mensaje, setMensaje] = useState('');
-  
-  // NUEVO: Estado para la lista de usuarios
   const [listaUsuarios, setListaUsuarios] = useState([]);
 
-  // 1. SEGURIDAD: VERIFICAR QUE EL USUARIO ES EL DUEÑO
+  // 1. SEGURIDAD: VERIFICAR DUEÑO
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user && user.email === 'axelnm35@gmail.com') {
@@ -26,26 +24,29 @@ export default function ComandoAdmin() {
     return () => unsubscribe();
   }, []);
 
-  // 2. NUEVO: CARGAR ÚLTIMOS USUARIOS AUTOMÁTICAMENTE
+  // 2. SINCRONIZACIÓN EN TIEMPO REAL CON FIRESTORE
   useEffect(() => {
     if (!adminLocal) return;
 
-    const cargarUsuarios = async () => {
-      try {
-        const q = query(collection(db, 'usuarios'), limit(20));
-        const querySnapshot = await getDocs(q);
-        
-        const usuariosTemp = [];
-        querySnapshot.forEach((doc) => {
-          usuariosTemp.push({ id: doc.id, ...doc.data() });
-        });
-        setListaUsuarios(usuariosTemp);
-      } catch (error) {
-        console.error("Error al cargar lista:", error);
-      }
-    };
+    const q = query(collection(db, 'usuarios'), limit(20));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const usuariosTemp = [];
+      snapshot.forEach((docSnap) => {
+        usuariosTemp.push({ id: docSnap.id, ...docSnap.data() });
+      });
+      setListaUsuarios(usuariosTemp);
 
-    cargarUsuarios();
+      // Si hay un usuario abierto en pantalla, actualizar su contador en vivo
+      setUsuarioEncontrado((prev) => {
+        if (!prev) return null;
+        const actualizado = usuariosTemp.find(u => u.id === prev.id);
+        return actualizado || prev;
+      });
+    }, (error) => {
+      console.error("Error en tiempo real:", error);
+    });
+
+    return () => unsubscribe();
   }, [adminLocal]);
 
   // 3. BUSCADOR MANUAL
@@ -70,7 +71,7 @@ export default function ComandoAdmin() {
     }
   };
 
-  // 4. ACTUALIZAR PASES DE EVENTOS
+  // 4. ACTUALIZAR PASES
   const actualizarCreditos = async (cantidad) => {
     if (!usuarioEncontrado) return;
     setMensaje('Actualizando creditos...');
@@ -80,11 +81,6 @@ export default function ComandoAdmin() {
       
       const userRef = doc(db, 'usuarios', usuarioEncontrado.id);
       await updateDoc(userRef, { creditosDisponibles: nuevosCreditos });
-      
-      setUsuarioEncontrado({ ...usuarioEncontrado, creditosDisponibles: nuevosCreditos });
-      
-      // Actualizar también en la lista visual
-      setListaUsuarios(listaUsuarios.map(u => u.id === usuarioEncontrado.id ? { ...u, creditosDisponibles: nuevosCreditos } : u));
       setMensaje('Creditos actualizados a: ' + nuevosCreditos);
     } catch (error) {
       setMensaje('Error: ' + error.message);
@@ -99,11 +95,6 @@ export default function ComandoAdmin() {
       const nuevoEstado = !usuarioEncontrado.esLocalSuscrito;
       const userRef = doc(db, 'usuarios', usuarioEncontrado.id);
       await updateDoc(userRef, { esLocalSuscrito: nuevoEstado });
-      
-      setUsuarioEncontrado({ ...usuarioEncontrado, esLocalSuscrito: nuevoEstado });
-      
-      // Actualizar también en la lista visual
-      setListaUsuarios(listaUsuarios.map(u => u.id === usuarioEncontrado.id ? { ...u, esLocalSuscrito: nuevoEstado } : u));
       setMensaje(nuevoEstado ? 'Suscripcion Mensual de Local ACTIVADA' : 'Suscripcion de Local DESACTIVADA');
     } catch (error) {
       setMensaje('Error: ' + error.message);
@@ -135,7 +126,6 @@ export default function ComandoAdmin() {
           {mensaje && <p className="mt-4 text-xs font-bold text-yellow-500 tracking-wide uppercase">{mensaje}</p>}
         </div>
 
-        {/* NUEVO: LISTA DE USUARIOS RÁPIDA */}
         {!usuarioEncontrado && listaUsuarios.length > 0 && (
           <div className="bg-zinc-900 p-6 rounded-2xl border border-zinc-800 shadow-xl mb-6">
             <h3 className="text-zinc-500 text-xs font-bold tracking-widest mb-4">ÚLTIMOS CLIENTES REGISTRADOS</h3>
@@ -160,10 +150,8 @@ export default function ComandoAdmin() {
           </div>
         )}
 
-        {/* TARJETA DE CONTROL (Se muestra al buscar o hacer clic en la lista) */}
         {usuarioEncontrado && (
           <div className="bg-zinc-900 p-6 rounded-2xl border border-zinc-800 flex flex-col gap-6 shadow-xl animate-fade-in relative">
-            
             <button 
               onClick={() => setUsuarioEncontrado(null)} 
               className="absolute top-6 right-6 text-zinc-500 hover:text-white text-xs font-bold tracking-widest"
