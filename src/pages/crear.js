@@ -13,6 +13,9 @@ export default function CrearEvento() {
   const [paso, setPaso] = useState(1);
   const [cargando, setCargando] = useState(false);
   const [mostrarPaywall, setMostrarPaywall] = useState(false);
+  
+  // Estado para la selección del plan ('1_EVENTO' o '2_EVENTOS')
+  const [planSeleccionado, setPlanSeleccionado] = useState('2_EVENTOS');
 
   const [tipo, setTipo] = useState('');
   const [nombre, setNombre] = useState('');
@@ -51,7 +54,6 @@ export default function CrearEvento() {
         portadaUrl = await getDownloadURL(storageRef);
       }
 
-      // Llamada atómica a useAlbum (valida saldo en usuarios/{email} y descuenta crédito)
       const nuevoAlbum = await crearAlbum(
         usuario.uid,
         usuario.email,
@@ -79,8 +81,13 @@ export default function CrearEvento() {
     }
   };
 
+  // Construcción dinámica del mensaje de WhatsApp según la opción elegida
+  const textoPlan = planSeleccionado === '1_EVENTO' 
+    ? 'Plan Individual (1 Evento - 330.000 Gs)' 
+    : 'Paquete Dúo (2 Eventos - 450.000 Gs)';
+
   const mensajeWhatsApp = encodeURIComponent(
-    `¡Hola! Quiero activar un pase de evento en Event-Dump.\nMi correo es: ${usuario.email}`
+    `¡Hola! Quiero activar el ${textoPlan} para Event-Dump.\nMi correo registrado es: ${usuario.email}`
   );
 
   return (
@@ -107,7 +114,6 @@ export default function CrearEvento() {
 
       <div className="w-full max-w-md flex flex-col flex-1">
         
-        {/* MODAL / VISTA DE PAGO (PAYWALL) CUANDO EL SALDO ES CERO */}
         {mostrarPaywall ? (
           <div className="bg-white rounded-3xl p-6 shadow-xl border border-gray-100 flex flex-col items-center text-center animate-fade-in">
             <span className="text-5xl mb-4">🎟️</span>
@@ -118,18 +124,34 @@ export default function CrearEvento() {
 
             <div className="w-full space-y-4 mb-6">
               {/* PLAN 1 EVENTO */}
-              <div className="border border-gray-200 rounded-2xl p-4 text-left relative bg-gray-50">
+              <button
+                type="button"
+                onClick={() => setPlanSeleccionado('1_EVENTO')}
+                className={`w-full text-left p-4 rounded-2xl border-2 transition-all relative ${
+                  planSeleccionado === '1_EVENTO'
+                    ? 'border-blue-600 bg-blue-50/50 shadow-md ring-1 ring-blue-600'
+                    : 'border-gray-200 bg-gray-50 hover:border-gray-300'
+                }`}
+              >
                 <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Plan Individual</p>
                 <div className="flex justify-between items-baseline mt-1">
                   <h3 className="text-lg font-bold text-gray-900">1 Evento Privado</h3>
                   <span className="text-xl font-black text-blue-600">330.000 Gs</span>
                 </div>
                 <p className="text-xs text-gray-500 mt-1">Acceso total, descargas en HD y QR ilimitado.</p>
-              </div>
+              </button>
 
-              {/* PLAN 2 EVENTOS (OFERTA) */}
-              <div className="border-2 border-blue-600 rounded-2xl p-4 text-left relative bg-blue-50/40">
-                <span className="absolute -top-3 right-4 bg-blue-600 text-white text-[10px] font-black tracking-widest px-3 py-1 rounded-full uppercase">
+              {/* PLAN 2 EVENTOS */}
+              <button
+                type="button"
+                onClick={() => setPlanSeleccionado('2_EVENTOS')}
+                className={`w-full text-left p-4 rounded-2xl border-2 transition-all relative ${
+                  planSeleccionado === '2_EVENTOS'
+                    ? 'border-blue-600 bg-blue-50/50 shadow-md ring-1 ring-blue-600'
+                    : 'border-gray-200 bg-gray-50 hover:border-gray-300'
+                }`}
+              >
+                <span className="absolute -top-3 right-4 bg-blue-600 text-white text-[10px] font-black tracking-widest px-3 py-1 rounded-full uppercase shadow">
                   Más Popular
                 </span>
                 <p className="text-xs font-bold text-blue-600 uppercase tracking-wider">Paquete Dúo</p>
@@ -138,7 +160,7 @@ export default function CrearEvento() {
                   <span className="text-xl font-black text-blue-600">450.000 Gs</span>
                 </div>
                 <p className="text-xs text-gray-600 mt-1">Ideal para previas, bodas y fiestas dobles.</p>
-              </div>
+              </button>
             </div>
 
             <a 
@@ -159,7 +181,6 @@ export default function CrearEvento() {
           </div>
         ) : (
           <>
-            {/* PASO 1: SELECCIÓN DEL TIPO DE EVENTO */}
             {paso === 1 && (
               <div className="animate-fade-in">
                 <h1 className="text-3xl font-serif text-center mb-10 text-black">
@@ -180,7 +201,6 @@ export default function CrearEvento() {
               </div>
             )}
 
-            {/* PASO 2: PERSONALIZACIÓN DEL EVENTO */}
             {paso === 2 && (
               <div className="flex flex-col flex-1 animate-fade-in">
                 <h1 className="text-2xl font-serif text-center mb-2 text-black">
