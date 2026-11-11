@@ -1,51 +1,97 @@
 import { useState } from 'react';
 import { db } from '../firebase/config';
-import { collection, doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
+import { collection, doc, getDoc, updateDoc, runTransaction } from 'firebase/firestore';
 import { REGLAS_APP, ESTADOS_ALBUM } from '../constants/reglas';
 import { RETOS_POR_DEFECTO } from '../constants/retosBase';
 
 export const useAlbum = () => {
   const [cargando, setCargando] = useState(false);
 
-  // 1. Función para crear un álbum nuevo (Por defecto nace en TRIAL)
-  const crearAlbum = async (creadorId, fechaEventoStr, configuracionCliente) => {
+  // 1. Función para crear un álbum con transacción atómica escalable
+  const crearAlbum = async (creadorId, emailUsuario, fechaEventoStr, configuracionCliente) => {
     setCargando(true);
     try {
+      if (!emailUsuario) {
+        throw new Error("Se requiere el correo del usuario para validar permisos.");
+      }
+
+      const emailFormateado = emailUsuario.toLowerCase();
+      const userRef = doc(db, 'usuarios', emailFormateado);
+      const nuevoAlbumRef = doc(collection(db, 'albums'));
+
       const fechaExpiracion = new Date();
       fechaExpiracion.setHours(fechaExpiracion.getHours() + REGLAS_APP.TRIAL_LIMITES.HORAS_AUTODESTRUCCION);
 
-      const nuevoAlbumRef = doc(collection(db, 'albums'));
-      
-      const datosAlbum = {
-        id: nuevoAlbumRef.id,
-        creadorId: creadorId,
-        fechaEvento: fechaEventoStr,
-        estado: ESTADOS_ALBUM.TRIAL,
-        fechaExpiracion: fechaExpiracion.toISOString(),
-        configuracion: {
-          permiteDescargas: configuracionCliente.permiteDescargas ?? true,
-          soloCamara: configuracionCliente.soloCamara ?? false,
-          permiteComentarios: configuracionCliente.permiteComentarios ?? true,
-          permiteLikes: configuracionCliente.permiteLikes ?? true,
-          tieneRetos: configuracionCliente.tieneRetos ?? true,
-          audiosPublicos: configuracionCliente.audiosPublicos ?? false,
-          juezRetosId: configuracionCliente.juezRetosId ?? null,
-        },
-        contadores: {
-          fotos: 0,
-          historias: 0,
-          audios: 0,
-          retos: 0
-        },
-        listaRetos: RETOS_POR_DEFECTO, // <-- Inyectamos la lista de 30 retos aquí
-        creadoEn: new Date().toISOString()
-      };
+      // Transacción atómica en Firestore para prevenir condiciones de carrera (Race Conditions)
+      const datosAlbumCreado = await runTransaction(db, async (transaction) => {
+        const userSnap = await transaction.get(userRef);
 
-      await setDoc(nuevoAlbumRef, datosAlbum);
+        let esLocalSuscrito = false;
+        let creditosDisponibles = 0;
+
+        if (userSnap.exists()) {
+          const userData = userSnap.data();
+          esLocalSuscrito = userData.esLocalSuscrito || false;
+          creditosDisponibles = userData.creditosDisponibles || 0;
+        }
+
+        // EVALUACIÓN DE REGLAS DE NEGOCIO Y SALDOS
+        let estadoAlbum = ESTADOS_ALBUM.TRIAL;
+        let esAlbumLocal = false;
+
+        if (esLocalSuscrito) {
+          // Caso 1: Suscripción mensual de local activa (Ilimitado)
+          estadoAlbum = ESTADOS_ALBUM.PAGADO;
+          esAlbumLocal = true;
+        } else if (creditosDisponibles > 0) {
+          // Caso 2: Pase de evento comprado (Descontar 1 crédito atómicamente)
+          estadoAlbum = ESTADOS_ALBUM.PAGADO;
+          esAlbumLocal = false;
+          transaction.update(userRef, {
+            creditosDisponibles: creditosDisponibles - 1
+          });
+        } else {
+          // Caso 3: Saldo cero -> Interrumpir transacción y lanzar código especial de pago
+          const errorSinCreditos = new Error("SIN_CREDITOS");
+          errorSinCreditos.code = "SIN_CREDITOS";
+          throw errorSinCreditos;
+        }
+
+        const datosAlbum = {
+          id: nuevoAlbumRef.id,
+          creadorId: creadorId,
+          creadorEmail: emailFormateado,
+          fechaEvento: fechaEventoStr,
+          nombreEvento: configuracionCliente.nombreEvento || "Mi Evento",
+          estado: estadoAlbum,
+          esLocal: esAlbumLocal,
+          fechaExpiracion: fechaExpiracion.toISOString(),
+          configuracion: {
+            permiteDescargas: configuracionCliente.permiteDescargas ?? true,
+            soloCamara: configuracionCliente.soloCamara ?? false,
+            permiteComentarios: configuracionCliente.permiteComentarios ?? true,
+            permiteLikes: configuracionCliente.permiteLikes ?? true,
+            tieneRetos: configuracionCliente.tieneRetos ?? true,
+            audiosPublicos: configuracionCliente.audiosPublicos ?? false,
+            juezRetosId: configuracionCliente.juezRetosId ?? null,
+          },
+          contadores: {
+            fotos: 0,
+            historias: 0,
+            audios: 0,
+            retos: 0
+          },
+          listaRetos: RETOS_POR_DEFECTO,
+          creadoEn: new Date().toISOString()
+        };
+
+        transaction.set(nuevoAlbumRef, datosAlbum);
+        return datosAlbum;
+      });
+
       setCargando(false);
-      return datosAlbum;
+      return datosAlbumCreado;
     } catch (error) {
-      console.error("Error creando el álbum:", error);
       setCargando(false);
       throw error;
     }
@@ -67,7 +113,7 @@ export const useAlbum = () => {
     }
   };
 
-  // 3. Función CRÍTICA: Verifica si puede subir
+  // 3. Función de validación para límites de carga
   const puedeSubirAccion = (album, tipoAccion) => {
     if (album.estado === ESTADOS_ALBUM.PAGADO) return true;
 
@@ -80,7 +126,7 @@ export const useAlbum = () => {
     return true;
   };
 
-  // 4. NUEVA FUNCIÓN: Actualizar lista de retos (Para el panel de configuración)
+  // 4. Actualizar lista de retos en la base de datos
   const actualizarRetos = async (albumId, nuevaListaRetos) => {
     try {
       const docRef = doc(db, 'albums', albumId);
