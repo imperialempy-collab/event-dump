@@ -60,9 +60,12 @@ export const useAlbum = () => {
         const datosAlbum = {
           id: nuevoAlbumRef.id,
           creadorId: creadorId,
+          adminId: creadorId, // Mantiene compatibilidad con la consulta de index.js
           creadorEmail: emailFormateado,
           fechaEvento: fechaEventoStr,
           nombreEvento: configuracionCliente.nombreEvento || "Mi Evento",
+          tipoEvento: configuracionCliente.tipoEvento || "", // <-- Añadido
+          portadaUrl: configuracionCliente.portadaUrl || "", // <-- Añadido (Muestra miniatura en Home)
           estado: estadoAlbum,
           esLocal: esAlbumLocal,
           fechaExpiracion: fechaExpiracion.toISOString(),
