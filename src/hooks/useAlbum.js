@@ -7,22 +7,21 @@ import { RETOS_POR_DEFECTO } from '../constants/retosBase';
 export const useAlbum = () => {
   const [cargando, setCargando] = useState(false);
 
-  // 1. Función para crear un álbum con transacción atómica escalable
   const crearAlbum = async (creadorId, emailUsuario, fechaEventoStr, configuracionCliente) => {
     setCargando(true);
     try {
-      if (!emailUsuario) {
-        throw new Error("Se requiere el correo del usuario para validar permisos.");
+      if (!creadorId) {
+        throw new Error("Se requiere la identidad del usuario para validar permisos.");
       }
 
-      const emailFormateado = emailUsuario.toLowerCase();
-      const userRef = doc(db, 'usuarios', emailFormateado);
+      const emailFormateado = (emailUsuario || '').toLowerCase();
+      // Búsqueda directa por el UID del usuario
+      const userRef = doc(db, 'usuarios', creadorId);
       const nuevoAlbumRef = doc(collection(db, 'albums'));
 
       const fechaExpiracion = new Date();
       fechaExpiracion.setHours(fechaExpiracion.getHours() + REGLAS_APP.TRIAL_LIMITES.HORAS_AUTODESTRUCCION);
 
-      // Transacción atómica en Firestore para prevenir condiciones de carrera (Race Conditions)
       const datosAlbumCreado = await runTransaction(db, async (transaction) => {
         const userSnap = await transaction.get(userRef);
 
@@ -32,26 +31,22 @@ export const useAlbum = () => {
         if (userSnap.exists()) {
           const userData = userSnap.data();
           esLocalSuscrito = userData.esLocalSuscrito || false;
-          creditosDisponibles = userData.creditosDisponibles || 0;
+          creditosDisponibles = Number(userData.creditosDisponibles) || 0;
         }
 
-        // EVALUACIÓN DE REGLAS DE NEGOCIO Y SALDOS
         let estadoAlbum = ESTADOS_ALBUM.TRIAL;
         let esAlbumLocal = false;
 
         if (esLocalSuscrito) {
-          // Caso 1: Suscripción mensual de local activa (Ilimitado)
           estadoAlbum = ESTADOS_ALBUM.PAGADO;
           esAlbumLocal = true;
         } else if (creditosDisponibles > 0) {
-          // Caso 2: Pase de evento comprado (Descontar 1 crédito atómicamente)
           estadoAlbum = ESTADOS_ALBUM.PAGADO;
           esAlbumLocal = false;
           transaction.update(userRef, {
             creditosDisponibles: creditosDisponibles - 1
           });
         } else {
-          // Caso 3: Saldo cero -> Interrumpir transacción y lanzar código especial de pago
           const errorSinCreditos = new Error("SIN_CREDITOS");
           errorSinCreditos.code = "SIN_CREDITOS";
           throw errorSinCreditos;
@@ -60,12 +55,12 @@ export const useAlbum = () => {
         const datosAlbum = {
           id: nuevoAlbumRef.id,
           creadorId: creadorId,
-          adminId: creadorId, // Mantiene compatibilidad con la consulta de index.js
+          adminId: creadorId,
           creadorEmail: emailFormateado,
           fechaEvento: fechaEventoStr,
           nombreEvento: configuracionCliente.nombreEvento || "Mi Evento",
-          tipoEvento: configuracionCliente.tipoEvento || "", // <-- Añadido
-          portadaUrl: configuracionCliente.portadaUrl || "", // <-- Añadido (Muestra miniatura en Home)
+          tipoEvento: configuracionCliente.tipoEvento || "",
+          portadaUrl: configuracionCliente.portadaUrl || "",
           estado: estadoAlbum,
           esLocal: esAlbumLocal,
           fechaExpiracion: fechaExpiracion.toISOString(),
@@ -100,7 +95,6 @@ export const useAlbum = () => {
     }
   };
 
-  // 2. Función para leer el álbum cuando el invitado escanea el QR
   const obtenerAlbum = async (albumId) => {
     try {
       const docRef = doc(db, 'albums', albumId);
@@ -116,7 +110,6 @@ export const useAlbum = () => {
     }
   };
 
-  // 3. Función de validación para límites de carga
   const puedeSubirAccion = (album, tipoAccion) => {
     if (album.estado === ESTADOS_ALBUM.PAGADO) return true;
 
@@ -129,7 +122,6 @@ export const useAlbum = () => {
     return true;
   };
 
-  // 4. Actualizar lista de retos en la base de datos
   const actualizarRetos = async (albumId, nuevaListaRetos) => {
     try {
       const docRef = doc(db, 'albums', albumId);
