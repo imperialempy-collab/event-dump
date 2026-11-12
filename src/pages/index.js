@@ -1,104 +1,208 @@
 import Head from 'next/head';
 import { useRouter } from 'next/router';
+import { useEffect, useRef } from 'react';
 
 export default function LandingPage() {
   const router = useRouter();
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    
+    var P = function(x, c, arms, s) {
+      s = s || 1;
+      return '<g transform="translate(' + x + ' 168) scale(' + s + ')">' + 
+             (arms ? '<path d="M-16 -30L-32 -62M16 -30L32 -62" stroke="' + c + '" stroke-width="9" stroke-linecap="round"/>' : '') + 
+             '<circle cy="-56" r="13" fill="#F2B995"/><path d="M-19 0v-30a19 19 0 0 1 38 0v30z" fill="' + c + '"/></g>';
+    };
+    var W = function(b) {
+      return '<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">' + b + '</svg>';
+    };
+    var bulbs = function() {
+      var s = '<path d="M-5 40Q100 90 205 40" stroke="#333" fill="none" stroke-width="1.5"/>';
+      [20, 50, 80, 110, 140, 170].forEach(function(x) {
+        var y = 40 + Math.sin((x + 5) / 210 * Math.PI) * 34;
+        s += '<circle cx="' + x + '" cy="' + (y + 7) + '" r="10" fill="#FFB22E" opacity=".25"/><circle cx="' + x + '" cy="' + (y + 7) + '" r="5" fill="#FFD66B"/>';
+      });
+      return s;
+    };
+    var S = {
+      lights: W('<defs><linearGradient id="g1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2B2D6E"/><stop offset="1" stop-color="#FF8A5B"/></linearGradient></defs><rect width="200" height="200" fill="url(#g1)"/>' + bulbs() + '<rect y="168" width="200" height="32" fill="#2a2440"/>' + P(78, '#FF4F81') + P(122, '#F4F1FF')),
+      cake: W('<rect width="200" height="200" fill="#FFD3E0"/><rect y="150" width="200" height="50" fill="#FF9DB9"/><rect x="55" y="115" width="90" height="38" rx="6" fill="#fff"/><rect x="70" y="85" width="60" height="32" rx="6" fill="#FF4F81"/><path d="M55 125q11 12 22 0t22 0 22 0 22 0" fill="#FF4F81"/><g stroke="#2F6BFF" stroke-width="4"><path d="M85 85v-18M100 85v-22M115 85v-18"/></g><g fill="#FFB22E"><circle cx="85" cy="62" r="6"/><circle cx="100" cy="57" r="6"/><circle cx="115" cy="62" r="6"/></g><circle cx="30" cy="40" r="5" fill="#2F6BFF"/><circle cx="170" cy="55" r="6" fill="#FFB22E"/><circle cx="150" cy="25" r="4" fill="#fff"/>'),
+      toast: W('<rect width="200" height="200" fill="#1B2150"/><g fill="#FFB22E"><circle cx="30" cy="40" r="22" opacity=".25"/><circle cx="165" cy="60" r="30" opacity=".2"/><circle cx="140" cy="150" r="18" opacity=".25"/><circle cx="50" cy="150" r="14" opacity=".3"/></g><g transform="rotate(-18 85 130)"><path d="M65 70h40l-7 55a13 13 0 0 1-26 0z" fill="#FFD66B" opacity=".9"/><path d="M85 130v38M70 168h30" stroke="#fff" stroke-width="4"/></g><g transform="rotate(18 118 130)"><path d="M98 70h40l-7 55a13 13 0 0 1-26 0z" fill="#FF8AAE" opacity=".9"/><path d="M118 130v38M103 168h30" stroke="#fff" stroke-width="4"/></g><g fill="#fff"><circle cx="102" cy="48" r="3"/><circle cx="90" cy="38" r="2"/><circle cx="114" cy="36" r="2"/></g>'),
+      dance: W('<defs><linearGradient id="g2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5B2A86"/><stop offset="1" stop-color="#FF4F81"/></linearGradient></defs><rect width="200" height="200" fill="url(#g2)"/><g fill="#fff"><circle cx="40" cy="35" r="16" opacity=".2"/><circle cx="160" cy="30" r="22" opacity=".15"/><circle cx="110" cy="55" r="10" opacity=".25"/></g>' + P(55, '#FFB22E', 1, .95) + P(105, '#2F6BFF', 1, 1.1) + P(152, '#fff', 1, .9)),
+      trip: W('<defs><linearGradient id="g3" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFB22E"/><stop offset="1" stop-color="#FF6F91"/></linearGradient></defs><rect width="200" height="200" fill="url(#g3)"/><circle cx="130" cy="100" r="34" fill="#FFF3C4"/><path d="M0 130q50-40 100-5t100-20v95H0z" fill="#7A3E83"/><path d="M0 160q60-25 120-5t80-5v50H0z" fill="#3C2358"/><rect x="60" y="150" width="62" height="20" rx="8" fill="#fff"/><path d="M72 150l10-14h26l10 14z" fill="#fff"/><circle cx="76" cy="171" r="7" fill="#161A33"/><circle cx="108" cy="171" r="7" fill="#161A33"/>')
+    };
+
+    const elements = containerRef.current.querySelectorAll('[data-s]');
+    elements.forEach(function(el) {
+      el.innerHTML = S[el.dataset.s];
+    });
+  }, []);
 
   return (
-    <div className="min-h-screen bg-white font-sans text-gray-900 selection:bg-blue-200">
+    <>
       <Head>
-        <title>Event-Dump | Álbum de fotos compartido por QR en Paraguay</title>
-        <meta name="description" content="Tus invitados escanean el QR y comparten fotos y videos de tu boda, cumpleaños o evento en tiempo real. Sin descargar apps." />
+        <title>Event-Dump | Álbum Compartido para Eventos</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+        <meta name="google" content="notranslate" />
         <link rel="icon" href="/favicon.ico" />
+        <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,900&family=Manrope:wght@400;600;800&family=Caveat:wght@600&display=swap" rel="stylesheet" />
       </Head>
 
-      {/* BARRA DE NAVEGACIÓN */}
-      <nav className="w-full max-w-6xl mx-auto px-6 py-6 flex justify-between items-center bg-white/80 backdrop-blur-md sticky top-0 z-50 border-b border-gray-100">
-        <div className="text-2xl font-black tracking-tighter notranslate" translate="no">Event-Dump</div>
-        <button 
-          onClick={() => router.push('/app')}
-          className="bg-gray-100 hover:bg-gray-200 text-gray-900 px-5 py-2 rounded-full font-bold text-sm transition"
-        >
-          Iniciar Sesión
-        </button>
-      </nav>
+      <style dangerouslySetInnerHTML={{__html: `
+        :root{--bg:#F6F7FB;--ink:#161A33;--muted:#5E6382;--card:#fff;--amber:#FFB22E;--pink:#FF4F81;--blue:#2F6BFF;--night:#14173A;
+        box-sizing:border-box;}
+        .event-dump-info-page *{box-sizing:border-box;margin:0}
+        .event-dump-info-page {background:var(--bg);color:var(--ink);font-family:Manrope,system-ui,sans-serif;font-size:17px;line-height:1.6;overflow-x:hidden; min-height: 100vh;}
+        .event-dump-info-page .w{max-width:560px;margin:0 auto;padding:0 24px}
+        .event-dump-info-page h1, .event-dump-info-page h2{font-family:Fraunces,Georgia,serif;font-weight:900;line-height:1.05;letter-spacing:-.02em}
+        .event-dump-info-page h1{font-size:clamp(44px,13vw,64px)}
+        .event-dump-info-page h2{font-size:clamp(32px,9vw,44px);margin-bottom:18px}
+        .event-dump-info-page p{margin-bottom:14px;color:var(--muted)}
+        .event-dump-info-page p b{color:var(--ink)}
+        .event-dump-info-page section{padding:64px 0}
+        .event-dump-info-page .hero{padding-top:40px;text-align:center}
+        .event-dump-info-page .brand{font-family:Fraunces,serif;font-weight:700;font-size:20px;margin-bottom:28px}
+        .event-dump-info-page .hero p{font-size:19px;margin:20px auto 0;max-width:420px}
+        
+        .event-dump-info-page .pol{background:#fff;padding:8px 8px 32px;border-radius:4px;box-shadow:0 10px 24px rgba(10,12,40,.22);position:relative;width:150px;flex:none}
+        .event-dump-info-page .pol svg{display:block;width:100%;height:auto;aspect-ratio:1}
+        .event-dump-info-page .pol span{position:absolute;left:0;right:0;bottom:6px;text-align:center;font-family:Caveat,cursive;font-size:18px;color:#2a2d4a;line-height:1.2}
+        
+        .event-dump-info-page .stack{position:relative;height:300px;margin:34px auto 0;max-width:340px}
+        .event-dump-info-page .stack .pol{position:absolute;width:158px}
+        .event-dump-info-page .stack .a{left:0;top:30px;transform:rotate(-9deg)}
+        .event-dump-info-page .stack .b{right:0;top:0;transform:rotate(7deg);z-index:2}
+        .event-dump-info-page .stack .c{left:80px;top:120px;transform:rotate(-2deg);z-index:3}
+        @keyframes drop{from{opacity:0;translate:0 -30px}to{opacity:1;translate:0 0}}
+        .event-dump-info-page .stack .pol{animation:drop .7s cubic-bezier(.2,.8,.3,1) both}
+        .event-dump-info-page .stack .b{animation-delay:.15s}
+        .event-dump-info-page .stack .c{animation-delay:.3s}
+        
+        .event-dump-info-page .night{background:var(--night);color:#fff;border-radius:36px;margin:0 12px;padding:60px 0}
+        .event-dump-info-page .night p{color:#C5C9EC}
+        .event-dump-info-page .night p b{color:#fff}
+        .event-dump-info-page .night h2{color:#fff}
+        
+        .event-dump-info-page .lq{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin:28px 0}
+        .event-dump-info-page .lq div{text-align:center;border-radius:16px;padding:14px 0 10px;background:rgba(255,255,255,.07)}
+        .event-dump-info-page .lq strong{display:block;font-family:Fraunces,serif;font-size:38px;line-height:1;color:var(--amber)}
+        .event-dump-info-page .lq em{font-style:normal;font-size:12px;color:#C5C9EC;font-weight:600}
+        
+        .event-dump-info-page .rules{list-style:none;padding:0;margin:22px 0}
+        .event-dump-info-page .rules li{display:flex;gap:14px;align-items:flex-start;padding:16px 0;border-bottom:1px solid rgba(127,134,180,.25);color:var(--ink);font-weight:600}
+        .event-dump-info-page .rules li:last-child{border:0}
+        .event-dump-info-page .rules i{font-style:normal;flex:none;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-size:15px;background:var(--pink);color:#fff;font-weight:800}
+        .event-dump-info-page .rules li.y i{background:var(--amber);color:#161A33}
+        .event-dump-info-page .rules small{display:block;font-weight:400;color:var(--muted);font-size:15px}
+        
+        .event-dump-info-page .strip{display:flex;gap:18px;overflow-x:auto;padding:14px 24px 30px;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch}
+        .event-dump-info-page .strip .pol{scroll-snap-align:center;width:170px}
+        .event-dump-info-page .strip .pol:nth-child(odd){transform:rotate(-2.5deg)}
+        .event-dump-info-page .strip .pol:nth-child(even){transform:rotate(2.5deg);margin-top:14px}
+        
+        .top-nav {display:flex; justify-content:space-between; align-items:center; padding: 20px 24px; position: sticky; top:0; z-index:100; background: rgba(246, 247, 251, 0.9); backdrop-filter: blur(10px);}
+        .btn-nav {background: var(--ink); color: #fff; border: none; padding: 10px 20px; border-radius: 20px; font-weight: 800; font-family: Manrope, sans-serif; cursor: pointer; transition: opacity 0.2s;}
+        .btn-nav:hover {opacity: 0.8;}
+        
+        .pricing-card {background: #fff; border: 2px solid var(--blue); border-radius: 24px; padding: 32px; text-align: center; margin: 20px 0; box-shadow: 0 10px 30px rgba(47, 107, 255, 0.15);}
+        .pricing-card h3 {font-family: Fraunces, serif; font-size: 28px; margin-bottom: 8px; font-weight: 900;}
+        .pricing-price {font-size: 42px; font-weight: 900; color: var(--blue); margin-bottom: 24px; line-height: 1;}
+        .btn-large {display: block; width: 100%; background: var(--blue); color: #fff; font-size: 18px; font-weight: 800; padding: 18px; border-radius: 30px; text-align: center; cursor: pointer; border: none; box-shadow: 0 8px 20px rgba(47, 107, 255, 0.3); transition: transform 0.2s;}
+        .btn-large:hover {transform: translateY(-2px);}
+      `}} />
 
-      {/* HERO SECTION */}
-      <header className="w-full max-w-6xl mx-auto px-6 pt-20 pb-28 text-center flex flex-col items-center animate-fade-in">
-        <div className="inline-block bg-blue-50 text-blue-600 px-4 py-1.5 rounded-full text-xs font-bold tracking-widest mb-6 border border-blue-100">
-          LA TENDENCIA EN EVENTOS 2026
-        </div>
-        <h1 className="text-5xl md:text-7xl font-serif text-black leading-tight mb-6">
-          El álbum digital de <br className="hidden md:block"/> tu evento en vivo.
-        </h1>
-        <p className="text-lg text-gray-500 max-w-2xl mx-auto mb-10 leading-relaxed">
-          Tus invitados escanean un código QR en sus mesas y comparten todas las fotos y videos que toman con sus celulares. Sin registros, sin descargar aplicaciones.
-        </p>
-        <div className="flex flex-col sm:flex-row gap-4 w-full justify-center">
-          <button 
-            onClick={() => router.push('/app')}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-10 rounded-full shadow-xl shadow-blue-200 transition transform hover:-translate-y-1 text-lg"
-          >
-            Crear Álbum Ahora
+      <div className="event-dump-info-page notranslate" translate="no" ref={containerRef}>
+        
+        {/* NUEVA BARRA SUPERIOR FIJA */}
+        <div className="top-nav">
+          <div className="brand" style={{margin:0}}>Event-Dump</div>
+          <button onClick={() => router.push('/app')} className="btn-nav">
+            Entrar
           </button>
-          <button 
-            onClick={() => router.push('/app')}
-            className="bg-white border-2 border-gray-200 hover:border-gray-300 text-gray-800 font-bold py-4 px-10 rounded-full transition text-lg"
-          >
-            Ver mis eventos
-          </button>
         </div>
-      </header>
 
-      {/* SECCIÓN: ¿CÓMO FUNCIONA? */}
-      <section className="bg-gray-50 py-24 border-t border-gray-100">
-        <div className="max-w-6xl mx-auto px-6">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-black mb-4">¿Cómo funciona Event-Dump?</h2>
-            <p className="text-gray-500 text-lg">Diseñado para bodas, cumpleaños y locales nocturnos.</p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {/* Paso 1 */}
-            <div className="bg-white p-10 rounded-[2rem] shadow-sm border border-gray-100 flex flex-col items-center text-center hover:shadow-md transition">
-              <div className="w-16 h-16 bg-blue-50 text-blue-600 flex items-center justify-center rounded-2xl text-2xl font-black mb-6">1</div>
-              <h3 className="text-xl font-bold mb-3">Crea tu evento</h3>
-              <p className="text-gray-500 leading-relaxed">Personaliza el nombre, sube una foto de portada y obtén tu código QR exclusivo al instante.</p>
-            </div>
-            {/* Paso 2 */}
-            <div className="bg-white p-10 rounded-[2rem] shadow-sm border border-gray-100 flex flex-col items-center text-center hover:shadow-md transition">
-              <div className="w-16 h-16 bg-blue-50 text-blue-600 flex items-center justify-center rounded-2xl text-2xl font-black mb-6">2</div>
-              <h3 className="text-xl font-bold mb-3">Imprime el QR</h3>
-              <p className="text-gray-500 leading-relaxed">Coloca el código impreso en los centros de mesa, en la entrada o proyéctalo en pantallas gigantes.</p>
-            </div>
-            {/* Paso 3 */}
-            <div className="bg-white p-10 rounded-[2rem] shadow-sm border border-gray-100 flex flex-col items-center text-center hover:shadow-md transition">
-              <div className="w-16 h-16 bg-blue-50 text-blue-600 flex items-center justify-center rounded-2xl text-2xl font-black mb-6">3</div>
-              <h3 className="text-xl font-bold mb-3">Tus invitados suben todo</h3>
-              <p className="text-gray-500 leading-relaxed">Al escanear, la cámara se abre en el navegador. Las fotos caen al álbum en tiempo real para descargar.</p>
+        <section className="hero" style={{paddingTop: '20px'}}>
+          <div className="w">
+            <h1>Las fotos que no se publican.</h1>
+            <p>La del flash en la cara. La risa con la boca llena. El de atrás que salió movido. Las mejores de la noche.</p>
+            <div className="stack">
+              <div className="pol a"><div data-s="lights"></div><span>2:46 am, cero filtro</span></div>
+              <div className="pol b"><div data-s="dance"></div><span>el que salió movido</span></div>
+              <div className="pol c"><div data-s="toast"></div><span>¡salud!</span></div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* SECCIÓN FINAL */}
-      <section className="py-24 text-center px-6">
-        <h2 className="text-3xl md:text-4xl font-black mb-6">Inmortaliza los mejores momentos</h2>
-        <p className="text-gray-500 max-w-lg mx-auto mb-10 text-lg">
-          Ya sea una boda íntima o el boliche más grande del país, recolecta cada recuerdo desde la perspectiva de tus invitados.
-        </p>
-        <button 
-          onClick={() => router.push('/app')}
-          className="bg-black hover:bg-gray-800 text-white font-bold py-4 px-10 rounded-full transition transform hover:-translate-y-1 text-lg shadow-xl"
-        >
-          Empezar mi primer álbum
-        </button>
-      </section>
-      
-      {/* PIE DE PÁGINA */}
-      <footer className="border-t border-gray-100 py-10 text-center text-gray-400 text-sm">
-        <p>© {new Date().getFullYear()} Event-Dump Paraguay. Todos los derechos reservados.</p>
-      </footer>
-    </div>
+        <section id="foto" className="w">
+          <h2>Sacaste 20 fotos y subiste solo 2 a Instagram.</h2>
+          <p>El resto quedó dormido entre capturas de pantalla y memes. Y ahí está lo mejor de esa noche.</p>
+        </section>
+
+        <section className="w">
+          <h2>¿Qué es un event dump?</h2>
+          <p>La recopilación, la colección, la “basura” de un evento. Todo lo que pasó, tal cual pasó.</p>
+          <p><b>Acá la basura es oro.</b> Es la prima bailando sola, el brindis con las copas chuecas, el tío dormido en la silla, la torta antes de que alguien le sacara el mejor ángulo.</p>
+        </section>
+
+        <div className="night">
+          <div className="w">
+            <h2>LQNSP</h2>
+            <div className="lq">
+              <div><strong>L</strong><em>Las</em></div><div><strong>Q</strong><em>Que</em></div><div><strong>N</strong><em>No</em></div><div><strong>S</strong><em>Se</em></div><div><strong>P</strong><em>Publican</em></div>
+            </div>
+            <p>Son esas fotos que nunca van a pasar por un filtro, pero que cuando las ves después te hacen decir <b>“qué noche”</b>.</p>
+            <p>Event-Dump es la <b>red social interna del evento</b>: una sola galería compartida, solo para los que estuvieron. Se llena en vivo, escaneando el código QR de las mesas.</p>
+          </div>
+        </div>
+
+        <section className="w">
+          <h2>Acá subimos todas.</h2>
+          <ul className="rules">
+            <li><i>✕</i><div>Sin filtros<small>La luz es la que había. Y estaba buena.</small></div></li>
+            <li><i>✕</i><div>Sin descargar apps<small>Se abre directo en el navegador del celular.</small></div></li>
+            <li className="y"><i>✓</i><div>Sonrisas reales<small>Las de verdad, con los ojos cerrados y todo.</small></div></li>
+            <li className="y"><i>✓</i><div>Momentos frescos<small>Subís, y ya lo ve toda la mesa.</small></div></li>
+          </ul>
+        </section>
+
+        <section style={{padding: '20px 0'}}>
+          <div className="w"><h2>Para cada noche que importa</h2></div>
+          <div className="strip">
+            <div className="pol"><div data-s="cake"></div><span>cumple, 12 velas</span></div>
+            <div className="pol"><div data-s="lights"></div><span>la boda, a la noche</span></div>
+            <div className="pol"><div data-s="trip"></div><span>viaje, ruta 40</span></div>
+            <div className="pol"><div data-s="dance"></div><span>la pista, 3 am</span></div>
+            <div className="pol"><div data-s="toast"></div><span>el brindis</span></div>
+          </div>
+        </section>
+
+        {/* NUEVA SECCIÓN DE VENTAS Y PRECIO */}
+        <section className="w" style={{paddingBottom: '80px'}}>
+          <h2 style={{textAlign: 'center'}}>Tu álbum digital privado</h2>
+          <p style={{textAlign: 'center', marginBottom: '30px'}}>QR ilimitados para tus invitados y descargas en alta calidad.</p>
+          
+          <div className="pricing-card">
+            <h3>Pase 1 Evento</h3>
+            <div className="pricing-price">330.000 Gs</div>
+            <ul className="rules" style={{textAlign: 'left', marginBottom: '30px'}}>
+              <li className="y" style={{borderBottom: 'none', padding: '8px 0'}}><i>✓</i><div>Fotos y videos ilimitados</div></li>
+              <li className="y" style={{borderBottom: 'none', padding: '8px 0'}}><i>✓</i><div>Código QR listo para imprimir</div></li>
+              <li className="y" style={{borderBottom: 'none', padding: '8px 0'}}><i>✓</i><div>Panel de moderación en vivo</div></li>
+            </ul>
+            <button onClick={() => router.push('/app')} className="btn-large">
+              Crear Álbum Ahora
+            </button>
+          </div>
+          
+          <p style={{textAlign: 'center', fontSize: '14px'}}>
+            ¿Sos dueño de un local o boliche? Tenemos planes mensuales. <br/>
+            <a href="https://wa.me/595900000000" target="_blank" style={{color: 'var(--blue)', fontWeight: 'bold', textDecoration: 'none'}}>Contactanos</a>
+          </p>
+        </section>
+
+      </div>
+    </>
   );
 }
