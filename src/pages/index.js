@@ -39,11 +39,11 @@ export default function LandingPage() {
 
   // Challenges generator
   const challenges = [
-    "🔥 Sacale una foto al amigo que peor está bailando en este momento.",
-    "🥂 Hacé un brindis con un desconocido y suban la foto juntos.",
-    "📸 Sacá una foto estilo 'portada de álbum de música' con tu mesa.",
-    "👑 Sacale una foto al cumpleañero/novios haciendo una pose ridícula.",
-    "🤫 Capturá una foto desprevenida de alguien riéndose a carcajadas."
+    "🔥 tirar los pasos prohibidos con un amigo.",
+    "🥂 Shot con los novios.",
+    "📸 cual es la mesa mas divertida de la fiesta.",
+    "👑 encuentra la persona con mas Aura de la noche.",
+    "🤫 Foto con un pelado."
   ];
 
   // Calculadora de recuerdos estimados
@@ -81,15 +81,15 @@ export default function LandingPage() {
       a: "Por supuesto. El anfitrión o el DJ tienen un panel de control rápido en tiempo real para ocultar o borrar cualquier foto con un solo toque antes o durante la transmisión."
     },
     {
-      q: "¿Cómo funciona el Tinder interno en el evento?",
+      q: "¿Cómo funciona el BlinkCrush interno en el evento?",
       a: "Los invitados que lo deseen activan su perfil en 5 segundos con un apodo y una selfie. Deslizan perfiles de los demás invitados de la fiesta. Si dos personas se dan 'Like' mutuamente, reciben una notificación de MATCH instantánea para ir a buscarse en la barra."
     },
     {
       q: "¿Cómo recibo las fotos al terminar el evento?",
-      a: "Al finalizar la fiesta, el anfitrión puede descargar todo el lote ('Dump') de fotos y videos en calidad original con un solo clic en un archivo ZIP ordenado."
+      a: "Al finalizar la fiesta, el anfitrión puede descargar todo el lote ('Dump') de fotos y videos con un solo clic en un archivo ZIP ordenado."
     },
     {
-      q: "¿Cómo realizo el pago de 330.000 Gs en Paraguay?",
+      q: "¿Cómo realizo el pago en Paraguay?",
       a: "Aceptamos Giros Tigo, transferencias bancarias (SIPAP), Pix o tarjetas de crédito/débito. Recibes la confirmación e inicio de tu álbum al instante."
     }
   ];
@@ -110,9 +110,9 @@ export default function LandingPage() {
       {/* TOP NOTIFICATION BAR */}
       <div className="bg-gradient-to-r from-purple-950 via-slate-900 to-pink-950 text-slate-200 text-xs md:text-sm py-2.5 px-4 text-center font-medium border-b border-pink-500/20 flex items-center justify-center gap-2">
         <span className="inline-flex items-center gap-1 bg-pink-500/20 text-pink-400 border border-pink-500/30 px-2 py-0.5 rounded-full text-xs font-bold animate-pulse">
-          <Sparkles className="w-3 h-3 text-pink-400" /> ¡Fiestas 2026!
+          <Sparkles className="w-3 h-3 text-pink-400" /> ¿Qué pasó ayer?
         </span>
-        <span>Consigue tu Pase Completo por <strong>330.000 Gs</strong> con fotos ilimitadas y Pantalla TV.</span>
+        <span>Lo mejor de la noche, que lo vivan todos!! <strong> </strong>- Retos - interacciones - trasmisión en Pantalla.</span>
       </div>
 
       {/* HEADER / NAVIGATION */}
@@ -139,7 +139,7 @@ export default function LandingPage() {
             <a href="#experiencia" className="hover:text-pink-400 transition-colors">¿Cómo Funciona?</a>
             <a href="#funciones" className="hover:text-pink-400 transition-colors">Las 4 Funciones</a>
             <a href="#lqnsp" className="hover:text-pink-400 transition-colors">Concepto LQNSP</a>
-            <a href="#precio" className="hover:text-pink-400 transition-colors">Precio (330k)</a>
+            <a href="#precio" className="hover:text-pink-400 transition-colors">Precio</a>
             <a href="#faq" className="hover:text-pink-400 transition-colors">FAQ</a>
             <button 
               onClick={() => router.push('/app')}
@@ -169,7 +169,7 @@ export default function LandingPage() {
           {/* Badge LQNSP */}
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-pink-500/10 border border-pink-500/30 text-pink-400 text-xs md:text-sm font-bold mb-6 backdrop-blur-md">
             <Flame className="w-4 h-4 text-orange-400 fill-orange-400 animate-bounce" />
-            <span>#LQNSP — Las Que No Se Publican en Instagram</span>
+            <span>#LQNSP — Las Que No Se Publican</span>
           </div>
 
           {/* Main Headline */}
@@ -182,7 +182,7 @@ export default function LandingPage() {
 
           {/* Subtitle */}
           <p className="text-lg md:text-xl text-slate-300 font-normal leading-relaxed max-w-3xl mx-auto mb-10">
-            Escaneo QR en la mesa sin bajar apps. Fotos en vivo en la pantalla gigante, juegos de retos picantes y un <strong className="text-white font-semibold">Tinder interno</strong> para que tus invitados hagan match en plena fiesta.
+            Escaneo QR en la mesa sin bajar apps. Fotos en vivo en la pantalla gigante, juegos de retos y un <strong className="text-white font-semibold">BlinkCrush</strong> interno, solo de tu fiesta.
           </p>
 
           {/* CTA Action Bar */}
@@ -192,7 +192,7 @@ export default function LandingPage() {
               className="w-full sm:w-auto bg-gradient-to-r from-pink-500 via-purple-600 to-orange-500 hover:brightness-110 text-white font-extrabold px-8 py-4 rounded-2xl text-lg transition-all shadow-xl shadow-pink-500/30 hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-3 group"
             >
               <Zap className="w-5 h-5 fill-current text-amber-300" />
-              <span>Crear Álbum por 330.000 Gs</span>
+              <span>Crear ÁlbumGs</span>
               <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
             </button>
             
@@ -221,7 +221,7 @@ export default function LandingPage() {
             </div>
             <div className="flex items-center justify-center gap-2">
               <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-              <span>Descargas HD ilimitadas</span>
+              <span>Descargas ilimitadas</span>
             </div>
           </div>
 
@@ -238,15 +238,15 @@ export default function LandingPage() {
             </div>
             <div className="p-4">
               <p className="text-3xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-pink-400">100%</p>
-              <p className="text-xs md:text-sm text-slate-400 mt-1 font-medium">Fotos sin Filtro / Reales</p>
+              <p className="text-xs md:text-sm text-slate-400 mt-1 font-medium">Diversión / Conexión</p>
             </div>
             <div className="p-4">
-              <p className="text-3xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">0 sec</p>
-              <p className="text-xs md:text-sm text-slate-400 mt-1 font-medium">Sin registros aburridos</p>
+              <p className="text-3xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">fácil</p>
+              <p className="text-xs md:text-sm text-slate-400 mt-1 font-medium">hasta para la abuela</p>
             </div>
             <div className="p-4">
-              <p className="text-3xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-orange-400">330k</p>
-              <p className="text-xs md:text-sm text-slate-400 mt-1 font-medium">Gs Pago Único por Evento</p>
+              <p className="text-3xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-orange-400">Priv</p>
+              <p className="text-xs md:text-sm text-slate-400 mt-1 font-medium">uso Exclusivo de tu evento</p>
             </div>
           </div>
         </div>
@@ -279,7 +279,7 @@ export default function LandingPage() {
                 <ul className="space-y-4 text-slate-300 text-sm">
                   <li className="flex items-start gap-3">
                     <span className="text-red-400 font-bold">✕</span>
-                    <span><strong>Pedir fotos por WhatsApp al día siguiente:</strong> El 80% de tus invitados se olvida de enviártelas o las manda comprimidas.</span>
+                    <span><strong>Pedir fotos por WhatsApp al día siguiente:</strong> El 80% de tus invitados se olvida de enviártelas.</span>
                   </li>
                   <li className="flex items-start gap-3">
                     <span className="text-red-400 font-bold">✕</span>
@@ -319,7 +319,7 @@ export default function LandingPage() {
                   </li>
                   <li className="flex items-start gap-3">
                     <CheckCircle2 className="w-5 h-5 text-purple-400 shrink-0 mt-0.5" />
-                    <span><strong>Tinder Interno + Retos:</strong> Los invitados juegan a desafíos y hacen match secreto durante la noche.</span>
+                    <span><strong>Macht Interno + Retos:</strong> Los invitados juegan a desafíos y hacen BC secreto durante la noche.</span>
                   </li>
                 </ul>
               </div>
