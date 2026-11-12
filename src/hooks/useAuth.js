@@ -8,41 +8,38 @@ export const useAuth = () => {
   const [cargando, setCargando] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setUsuario(user);
+      
+      // Sincronización automática garantizada por UID
+      if (user && user.email) {
+        try {
+          const userRef = doc(db, 'usuarios', user.uid);
+          const userSnap = await getDoc(userRef);
+
+          if (!userSnap.exists()) {
+            await setDoc(userRef, {
+              uid: user.uid,
+              email: user.email.toLowerCase(),
+              nombre: user.displayName || 'Usuario Nuevo',
+              creditosDisponibles: 0,
+              esLocalSuscrito: false,
+              fechaRegistro: new Date().toISOString()
+            });
+          }
+        } catch (error) {
+          console.error("Error sincronizando usuario:", error);
+        }
+      }
       setCargando(false);
     });
+
     return () => unsubscribe();
   }, []);
 
   const loginConGoogle = async () => {
     const provider = new GoogleAuthProvider();
-    try {
-      const result = await signInWithPopup(auth, provider);
-      const user = result.user;
-
-      // Registrar o sincronizar en la colección 'usuarios' de Firestore
-      if (user && user.email) {
-        const emailFormateado = user.email.toLowerCase();
-        const userRef = doc(db, 'usuarios', emailFormateado);
-        const userSnap = await getDoc(userRef);
-
-        if (!userSnap.exists()) {
-          await setDoc(userRef, {
-            email: emailFormateado,
-            nombre: user.displayName || 'Usuario Nuevo',
-            creditosDisponibles: 0,
-            esLocalSuscrito: false,
-            fechaRegistro: new Date().toISOString()
-          });
-        }
-      }
-
-      return result;
-    } catch (error) {
-      console.error("Error al iniciar sesion con Google:", error);
-      throw error;
-    }
+    return await signInWithPopup(auth, provider);
   };
 
   const loginInvitado = async () => {
