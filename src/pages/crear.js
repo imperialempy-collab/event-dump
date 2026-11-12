@@ -99,7 +99,7 @@ export default function CrearEvento() {
           onClick={() => {
             if (mostrarPaywall) setMostrarPaywall(false);
             else if (paso === 2) setPaso(1);
-            else router.push('/');
+            else router.push('/app');
           }} 
           className="text-2xl text-gray-600 font-bold"
         >
