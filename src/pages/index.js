@@ -192,7 +192,7 @@ export default function LandingPage() {
               className="w-full sm:w-auto bg-gradient-to-r from-pink-500 via-purple-600 to-orange-500 hover:brightness-110 text-white font-extrabold px-8 py-4 rounded-2xl text-lg transition-all shadow-xl shadow-pink-500/30 hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-3 group"
             >
               <Zap className="w-5 h-5 fill-current text-amber-300" />
-              <span>Crear ÁlbumGs</span>
+              <span>Crear Álbum</span>
               <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
             </button>
             
