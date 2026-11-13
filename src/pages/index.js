@@ -32,7 +32,6 @@ export default function LandingPage() {
   
   const [activeTab, setActiveTab] = useState('live');
   const [activeFaq, setActiveFaq] = useState(null);
-  const [guestCount, setGuestCount] = useState(120);
   const [likedTinder, setLikedTinder] = useState(false);
   const [showMatch, setShowMatch] = useState(false);
   const [currentChallenge, setCurrentChallenge] = useState(0);
