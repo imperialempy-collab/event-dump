@@ -626,71 +626,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* MEMORY CALCULATOR TOOL */}
-      <section className="py-20 bg-slate-900/60 border-t border-slate-800">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          
-          <div className="bg-slate-950 p-8 md:p-10 rounded-3xl border border-slate-800 shadow-xl">
-            <div className="text-center max-w-xl mx-auto mb-8">
-              <span className="text-xs font-bold text-orange-400 uppercase tracking-widest">Simulador de Recuerdos</span>
-              <h3 className="text-2xl md:text-3xl font-extrabold text-white mt-1">
-                ¿Cuántos momentos va a capturar tu fiesta?
-              </h3>
-            </div>
-
-            <div className="grid md:grid-cols-2 gap-8 items-center">
-              <div>
-                <div className="flex justify-between text-sm font-bold text-white mb-3">
-                  <span>Cantidad de Invitados:</span>
-                  <span className="text-pink-400 text-lg">{guestCount} personas</span>
-                </div>
-                <input 
-                  type="range" 
-                  min="20" 
-                  max="500" 
-                  step="10"
-                  value={guestCount}
-                  onChange={(e) => setGuestCount(Number(e.target.value))}
-                  className="w-full h-2.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-pink-500 mb-6"
-                />
-
-                <div className="space-y-3 text-xs text-slate-300">
-                  <div className="flex justify-between p-2.5 bg-slate-900 rounded-xl">
-                    <span>📷 Fotos estimadas capturadas:</span>
-                    <strong className="text-white">{estimatedPhotos} fotos HD</strong>
-                  </div>
-                  <div className="flex justify-between p-2.5 bg-slate-900 rounded-xl">
-                    <span>🔥 Retos divertidos completados:</span>
-                    <strong className="text-orange-400">{estimatedChallenges} fotos reto</strong>
-                  </div>
-                  <div className="flex justify-between p-2.5 bg-slate-900 rounded-xl">
-                    <span>💘 Matches secretos entre solteros:</span>
-                    <strong className="text-pink-400">~{estimatedMatches} matches</strong>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-gradient-to-br from-purple-900/50 to-pink-900/40 p-6 rounded-2xl border border-pink-500/30 text-center">
-                <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider block mb-1">Todo incluido en tu pase</span>
-                <p className="text-4xl font-black text-white my-2">
-                  330.000 <span className="text-sm font-normal text-pink-300">Gs</span>
-                </p>
-                <p className="text-xs text-slate-300 mb-6">
-                  Pago único por evento. Sin límites de fotos ni sorpresas.
-                </p>
-                <button 
-                  onClick={() => router.push('/crear')}
-                  className="w-full bg-gradient-to-r from-pink-500 to-orange-500 text-white text-sm font-extrabold py-3.5 rounded-xl shadow-lg shadow-pink-500/30 hover:scale-105 transition-all"
-                >
-                  Asegurar mi Fecha Ahora
-                </button>
-              </div>
-            </div>
-
-          </div>
-
-        </div>
-      </section>
+   
 
       {/* PRICING CARD SECTION (330.000 Gs) */}
       <section id="precio" className="py-24 bg-[#0B0D19] relative">
