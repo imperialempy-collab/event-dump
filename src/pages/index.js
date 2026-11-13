@@ -32,7 +32,6 @@ export default function LandingPage() {
   
   const [activeTab, setActiveTab] = useState('live');
   const [activeFaq, setActiveFaq] = useState(null);
-  const [guestCount, setGuestCount] = useState(120);
   const [likedTinder, setLikedTinder] = useState(false);
   const [showMatch, setShowMatch] = useState(false);
   const [currentChallenge, setCurrentChallenge] = useState(0);
@@ -45,11 +44,6 @@ export default function LandingPage() {
     "👑 encuentra la persona con mas Aura de la noche.",
     "🤫 Foto con un pelado."
   ];
-
-  // Calculadora de recuerdos estimados
-  const estimatedPhotos = Math.floor(guestCount * 6.5);
-  const estimatedMatches = Math.floor(guestCount * 0.22);
-  const estimatedChallenges = Math.floor(guestCount * 1.4);
 
   const nextChallenge = () => {
     setCurrentChallenge((prev) => (prev + 1) % challenges.length);
@@ -626,75 +620,9 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* MEMORY CALCULATOR TOOL */}
-      <section className="py-20 bg-slate-900/60 border-t border-slate-800">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          
-          <div className="bg-slate-950 p-8 md:p-10 rounded-3xl border border-slate-800 shadow-xl">
-            <div className="text-center max-w-xl mx-auto mb-8">
-              <span className="text-xs font-bold text-orange-400 uppercase tracking-widest">Simulador de Recuerdos</span>
-              <h3 className="text-2xl md:text-3xl font-extrabold text-white mt-1">
-                ¿Cuántos momentos va a capturar tu fiesta?
-              </h3>
-            </div>
-
-            <div className="grid md:grid-cols-2 gap-8 items-center">
-              <div>
-                <div className="flex justify-between text-sm font-bold text-white mb-3">
-                  <span>Cantidad de Invitados:</span>
-                  <span className="text-pink-400 text-lg">{guestCount} personas</span>
-                </div>
-                <input 
-                  type="range" 
-                  min="20" 
-                  max="500" 
-                  step="10"
-                  value={guestCount}
-                  onChange={(e) => setGuestCount(Number(e.target.value))}
-                  className="w-full h-2.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-pink-500 mb-6"
-                />
-
-                <div className="space-y-3 text-xs text-slate-300">
-                  <div className="flex justify-between p-2.5 bg-slate-900 rounded-xl">
-                    <span>📷 Fotos estimadas capturadas:</span>
-                    <strong className="text-white">{estimatedPhotos} fotos HD</strong>
-                  </div>
-                  <div className="flex justify-between p-2.5 bg-slate-900 rounded-xl">
-                    <span>🔥 Retos divertidos completados:</span>
-                    <strong className="text-orange-400">{estimatedChallenges} fotos reto</strong>
-                  </div>
-                  <div className="flex justify-between p-2.5 bg-slate-900 rounded-xl">
-                    <span>💘 Matches secretos entre solteros:</span>
-                    <strong className="text-pink-400">~{estimatedMatches} matches</strong>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-gradient-to-br from-purple-900/50 to-pink-900/40 p-6 rounded-2xl border border-pink-500/30 text-center">
-                <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider block mb-1">Todo incluido en tu pase</span>
-                <p className="text-4xl font-black text-white my-2">
-                  330.000 <span className="text-sm font-normal text-pink-300">Gs</span>
-                </p>
-                <p className="text-xs text-slate-300 mb-6">
-                  Pago único por evento. Sin límites de fotos ni sorpresas.
-                </p>
-                <button 
-                  onClick={() => router.push('/crear')}
-                  className="w-full bg-gradient-to-r from-pink-500 to-orange-500 text-white text-sm font-extrabold py-3.5 rounded-xl shadow-lg shadow-pink-500/30 hover:scale-105 transition-all"
-                >
-                  Asegurar mi Fecha Ahora
-                </button>
-              </div>
-            </div>
-
-          </div>
-
-        </div>
-      </section>
-
-      {/* PRICING CARD SECTION (330.000 Gs) */}
+      {/* PRICING SECTION (Pase Único + Dúo) */}
       <section id="precio" className="py-24 bg-[#0B0D19] relative">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           
           <div className="text-center max-w-xl mx-auto mb-16">
             <h2 className="text-xs font-bold uppercase tracking-widest text-pink-400 mb-2">Precio Transparente</h2>
@@ -703,63 +631,99 @@ export default function LandingPage() {
             </p>
           </div>
 
-          <div className="max-w-md mx-auto bg-gradient-to-b from-slate-900 to-purple-950 p-8 md:p-10 rounded-3xl border-2 border-pink-500/50 shadow-2xl shadow-pink-500/20 relative">
+          <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto items-stretch">
             
-            <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-gradient-to-r from-pink-500 to-orange-500 text-white text-xs font-black uppercase px-4 py-1.5 rounded-full shadow-md">
-              Pase Completo por Evento
-            </div>
-
-            <div className="text-center my-6">
-              <h3 className="text-2xl font-extrabold text-white mb-1">Pase 1 Evento</h3>
-              <p className="text-xs text-slate-400">Ideal para Bodas, Cumples, XV y Fiestas Privadas</p>
-              
-              <div className="mt-6 mb-4">
-                <span className="text-5xl font-black text-white tracking-tight">330.000</span>
-                <span className="text-lg font-bold text-pink-400 ml-1">Gs</span>
+            {/* PLAN INDIVIDUAL (330k) */}
+            <div className="bg-slate-900/80 p-8 md:p-10 rounded-3xl border border-slate-800 relative flex flex-col justify-between hover:border-pink-500/30 transition-all">
+              <div>
+                <h3 className="text-xl font-extrabold text-white mb-1">Pase 1 Evento</h3>
+                <p className="text-xs text-slate-400">Ideal para Bodas, Cumples y Fiestas Privadas</p>
+                
+                <div className="mt-6 mb-8">
+                  <span className="text-4xl font-black text-white tracking-tight">330.000</span>
+                  <span className="text-lg font-bold text-pink-400 ml-1">Gs</span>
+                </div>
+                
+                <ul className="space-y-4 text-sm text-slate-300 mb-8">
+                  <li className="flex items-start gap-3">
+                    <CheckCircle2 className="w-5 h-5 text-slate-500 shrink-0" />
+                    <span><strong>Fotos & Videos ilimitados</strong></span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <CheckCircle2 className="w-5 h-5 text-slate-500 shrink-0" />
+                    <span><strong>Códigos QR</strong> para las mesas</span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <CheckCircle2 className="w-5 h-5 text-slate-500 shrink-0" />
+                    <span><strong>Proyección Live TV</strong></span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <CheckCircle2 className="w-5 h-5 text-slate-500 shrink-0" />
+                    <span><strong>Descarga ZIP HD</strong> post-evento</span>
+                  </li>
+                </ul>
               </div>
-              <p className="text-xs text-emerald-400 font-semibold">✓ Pago único — Acceso completo</p>
+
+              <button 
+                onClick={() => router.push('/crear')}
+                className="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-4 px-6 rounded-2xl text-sm transition-all"
+              >
+                Comprar Pase Individual
+              </button>
             </div>
 
-            <ul className="space-y-3 text-sm text-slate-200 mb-8 border-t border-b border-slate-800 py-6">
-              <li className="flex items-center gap-3">
-                <CheckCircle2 className="w-5 h-5 text-pink-400 shrink-0" />
-                <span><strong>Fotos & Videos ilimitados</strong> sin compresión</span>
-              </li>
-              <li className="flex items-center gap-3">
-                <CheckCircle2 className="w-5 h-5 text-pink-400 shrink-0" />
-                <span><strong>Códigos QR imprimibles</strong> para las mesas</span>
-              </li>
-              <li className="flex items-center gap-3">
-                <CheckCircle2 className="w-5 h-5 text-pink-400 shrink-0" />
-                <span><strong>Proyección Live TV</strong> para pantalla gigante</span>
-              </li>
-              <li className="flex items-center gap-3">
-                <CheckCircle2 className="w-5 h-5 text-pink-400 shrink-0" />
-                <span><strong>Tinder Interno</strong> (Match secreto entre invitados)</span>
-              </li>
-              <li className="flex items-center gap-3">
-                <CheckCircle2 className="w-5 h-5 text-pink-400 shrink-0" />
-                <span><strong>Juegos de Retos</strong> en vivo para la fiesta</span>
-              </li>
-              <li className="flex items-center gap-3">
-                <CheckCircle2 className="w-5 h-5 text-pink-400 shrink-0" />
-                <span><strong>Descarga ZIP HD</strong> de todas las fotos post-evento</span>
-              </li>
-            </ul>
+            {/* PAQUETE DÚO (450k) - HIGHLIGHTED */}
+            <div className="bg-gradient-to-b from-slate-900 to-purple-950 p-8 md:p-10 rounded-3xl border-2 border-pink-500/50 shadow-2xl shadow-pink-500/20 relative flex flex-col justify-between transform md:-translate-y-4">
+              
+              <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-gradient-to-r from-pink-500 to-orange-500 text-white text-xs font-black uppercase px-4 py-1.5 rounded-full shadow-md">
+                El Más Popular
+              </div>
 
-            <button 
-              onClick={() => router.push('/crear')}
-              className="w-full bg-gradient-to-r from-pink-500 via-purple-600 to-orange-500 hover:brightness-110 text-white font-black py-4 px-6 rounded-2xl text-lg shadow-xl shadow-pink-500/30 transition-all hover:scale-105 active:scale-95"
-            >
-              Crear Mi Álbum Ahora
-            </button>
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <h3 className="text-2xl font-extrabold text-white">Paquete Dúo</h3>
+                </div>
+                <p className="text-xs text-pink-300">2 Eventos separados. Para previas, ceremonias o dobles fiestas.</p>
+                
+                <div className="mt-6 mb-8">
+                  <span className="text-5xl font-black text-white tracking-tight">450.000</span>
+                  <span className="text-lg font-bold text-pink-400 ml-1">Gs</span>
+                </div>
+                
+                <ul className="space-y-4 text-sm text-slate-200 mb-8 border-t border-slate-800/50 pt-6">
+                  <li className="flex items-start gap-3">
+                    <CheckCircle2 className="w-5 h-5 text-pink-400 shrink-0" />
+                    <span><strong>Todo lo del plan individual x2</strong></span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <CheckCircle2 className="w-5 h-5 text-pink-400 shrink-0" />
+                    <span><strong>Tinder Interno</strong> (Match secreto) habilitado</span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <CheckCircle2 className="w-5 h-5 text-pink-400 shrink-0" />
+                    <span><strong>Juegos de Retos</strong> en vivo habilitados</span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <CheckCircle2 className="w-5 h-5 text-pink-400 shrink-0" />
+                    <span>Ahorras 210.000 Gs al comprarlos juntos</span>
+                  </li>
+                </ul>
+              </div>
 
-            <p className="text-[11px] text-center text-slate-400 mt-4">
-              ¿Eres dueño de boliche o salón de eventos? <br/>
-              <a href="https://wa.me/595900000000" target="_blank" className="text-pink-400 font-bold underline">Consulta planes mensuales especiales</a>
-            </p>
+              <button 
+                onClick={() => router.push('/crear')}
+                className="w-full bg-gradient-to-r from-pink-500 via-purple-600 to-orange-500 hover:brightness-110 text-white font-black py-4 px-6 rounded-2xl text-lg shadow-xl shadow-pink-500/30 transition-all hover:scale-105 active:scale-95"
+              >
+                Comprar Paquete Dúo
+              </button>
+            </div>
 
           </div>
+
+          <p className="text-xs text-center text-slate-400 mt-10">
+            ¿Eres dueño de boliche o salón de eventos? <br className="md:hidden"/>
+            <a href="https://wa.me/595900000000" target="_blank" className="text-pink-400 font-bold underline ml-1">Consulta planes mensuales (Local Suscrito)</a>
+          </p>
 
         </div>
       </section>
@@ -805,7 +769,7 @@ export default function LandingPage() {
                   ))}
                 </div>
                 <p className="text-slate-300 text-sm leading-relaxed mb-6">
-                  "El Tinder interno fue un golazo total en mi cumple de 25. ¡Se formaron 4 parejas en la misma noche! Nadie tuvo que pedir números de teléfono con vergüenza."
+                  "El BlinkCrush interno fue un golazo total en mi cumple de 25. ¡Se formaron 4 parejas en la misma noche! Nadie tuvo que pedir números de teléfono con vergüenza."
                 </p>
               </div>
               <div className="flex items-center gap-3">
@@ -893,7 +857,7 @@ export default function LandingPage() {
             onClick={() => router.push('/crear')}
             className="bg-gradient-to-r from-pink-500 via-purple-600 to-orange-500 hover:brightness-110 text-white font-extrabold px-10 py-4 rounded-2xl text-lg shadow-xl shadow-pink-500/30 transition-all hover:scale-105 active:scale-95"
           >
-            Crear Álbum — 330.000 Gs
+            Crear Álbum
           </button>
 
         </div>
