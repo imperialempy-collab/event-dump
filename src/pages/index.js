@@ -625,8 +625,6 @@ export default function LandingPage() {
         </div>
       </section>
 
-   
-
       {/* PRICING CARD SECTION (330.000 Gs) */}
       <section id="precio" className="py-24 bg-[#0B0D19] relative">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
