@@ -143,6 +143,9 @@ export default function LandingPage() {
     return () => clearTimeout(timer);
   }, [tvIndex, activeTab, tvIniciada, currentTvItem.tipo]);
   
+const [retoFase, setRetoFase] = useState('idle'); // 'idle' | 'countdown' | 'revealed'
+  const [retoCount, setRetoCount] = useState(3);
+
   // Challenges generator
   const challenges = [
     "🔥 tirar los pasos prohibidos con un amigo.",
@@ -152,10 +155,35 @@ export default function LandingPage() {
     "🤫 Foto con un pelado."
   ];
 
-  const nextChallenge = () => {
-    setCurrentChallenge((prev) => (prev + 1) % challenges.length);
+  const iniciarJuegoReto = () => {
+    setRetoCount(3);
+    setRetoFase('countdown');
   };
 
+  const siguienteRetoJuego = () => {
+    setCurrentChallenge((prev) => (prev + 1) % challenges.length);
+    setRetoCount(3);
+    setRetoFase('countdown');
+  };
+
+  useEffect(() => {
+    if (activeTab !== 'retos') {
+      setRetoFase('idle');
+      return;
+    }
+    if (retoFase !== 'countdown') return;
+
+    const timer = setTimeout(() => {
+      if (retoCount > 1) {
+        setRetoCount((prev) => prev - 1);
+      } else {
+        setRetoFase('revealed');
+      }
+    }, 800);
+
+    return () => clearTimeout(timer);
+  }, [retoFase, retoCount, activeTab]);
+  
   const handleTinderLike = () => {
     setLikedTinder(true);
     setTimeout(() => {
@@ -732,42 +760,69 @@ export default function LandingPage() {
               </div>
             )}
 
-            {/* 3. RETOS & JUEGOS DEMO */}
+   {/* 3. RETOS & JUEGOS DEMO */}
             {activeTab === 'retos' && (
               <div className="grid md:grid-cols-2 gap-8 items-center animate-in fade-in duration-300">
-                <div className="bg-slate-950 p-6 rounded-3xl border border-orange-500/30 text-center shadow-xl">
-                  <div className="w-12 h-12 rounded-2xl bg-orange-500/20 text-orange-400 flex items-center justify-center mx-auto mb-4 border border-orange-500/40">
-                    <Flame className="w-6 h-6 fill-current" />
-                  </div>
-                  <span className="text-[10px] font-bold text-orange-400 uppercase tracking-widest block mb-2">Desafío de la Fiesta #3</span>
-                  
-                  <p className="text-base font-bold text-white min-h-[60px] flex items-center justify-center px-4">
-                    "{challenges[currentChallenge]}"
-                  </p>
+                
+                {/* PANTALLA INTERACTIVA DE RETOS */}
+                <div
+                  className={`min-h-[290px] sm:min-h-[320px] p-6 sm:p-8 rounded-3xl border shadow-2xl flex flex-col items-center justify-center text-center transition-colors duration-300 select-none ${
+                    retoFase === 'revealed'
+                      ? 'bg-white border-white text-black'
+                      : 'bg-black border-slate-800 text-white'
+                  }`}
+                >
+                  {/* ESTADO 1: SOLO BOTÓN JUGAR */}
+                  {retoFase === 'idle' && (
+                    <button
+                      onClick={iniciarJuegoReto}
+                      className="bg-gradient-to-r from-orange-500 to-pink-500 hover:brightness-110 text-white font-black text-xl sm:text-2xl uppercase tracking-wider px-10 py-5 rounded-2xl shadow-xl shadow-orange-500/30 hover:scale-105 active:scale-95 transition-all flex items-center gap-3"
+                    >
+                      <Play className="w-6 h-6 fill-current" />
+                      <span>Jugar</span>
+                    </button>
+                  )}
 
-                  <div className="mt-6 flex flex-col gap-3">
-                    <button 
-                      onClick={nextChallenge}
-                      className="w-full bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 py-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2"
+                  {/* ESTADO 2: CONTADOR 3, 2, 1 EN FONDO NEGRO */}
+                  {retoFase === 'countdown' && (
+                    <div
+                      key={`count-${retoCount}`}
+                      className="flex items-center justify-center animate-in zoom-in-75 duration-200"
                     >
-                      <RotateCw className="w-3.5 h-3.5" />
-                      <span>Siguiente Reto</span>
-                    </button>
-                    <button 
-                      onClick={() => router.push('/crear')}
-                      className="w-full bg-gradient-to-r from-orange-500 to-pink-500 text-white py-3 rounded-xl text-xs font-bold shadow-lg shadow-orange-500/20"
-                    >
-                      Subir Foto de Cumplimiento
-                    </button>
-                  </div>
+                      <span className="text-8xl sm:text-9xl font-black text-white tracking-tighter">
+                        {retoCount}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* ESTADO 3: RETO GRANDE FONDO BLANCO + LETRA NEGRA + BOTÓN SIGUIENTE RETO */}
+                  {retoFase === 'revealed' && (
+                    <div className="w-full h-full flex flex-col justify-between items-center gap-6 animate-in fade-in zoom-in-95 duration-200">
+                      <div className="flex-1 flex items-center justify-center px-2">
+                        <p className="text-2xl sm:text-3xl font-black text-black leading-snug">
+                          {challenges[currentChallenge]}
+                        </p>
+                      </div>
+
+                      <button
+                        onClick={siguienteRetoJuego}
+                        className="w-full bg-black hover:bg-zinc-800 text-white font-extrabold text-sm sm:text-base uppercase tracking-wider py-4 px-6 rounded-2xl shadow-lg hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2"
+                      >
+                        <RotateCw className="w-4 h-4" />
+                        <span>Siguiente Reto</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
 
+                {/* DESCRIPCIÓN DERECHA */}
                 <div className="space-y-4">
                   <h3 className="text-2xl font-bold text-white">Juegos & Retos interactivos</h3>
                   <p className="text-slate-400 text-sm leading-relaxed">
                     Mantén a la gente activa durante toda la noche con desafíos divertidos. Los invitados suben la foto cumpliendo el reto y compiten en la tabla de posiciones en vivo.
                   </p>
                 </div>
+
               </div>
             )}
 
