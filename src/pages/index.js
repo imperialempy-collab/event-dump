@@ -448,7 +448,7 @@ const [retoFase, setRetoFase] = useState('idle'); // 'idle' | 'countdown' | 'rev
                   </li>
                   <li className="flex items-start gap-3">
                     <CheckCircle2 className="w-5 h-5 text-purple-400 shrink-0 mt-0.5" />
-                    <span><strong>Macht Interno + Retos:</strong> Los invitados juegan a desafíos y hacen BC secreto durante la noche.</span>
+                    <span><strong>Match Interno + Retos:</strong> Los invitados juegan a desafíos y hacen BC secreto durante la noche.</span>
                   </li>
                 </ul>
               </div>
