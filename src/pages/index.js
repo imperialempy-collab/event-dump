@@ -148,11 +148,11 @@ const [retoFase, setRetoFase] = useState('idle'); // 'idle' | 'countdown' | 'rev
 
   // Challenges generator
   const challenges = [
-    "🔥 tirar los pasos prohibidos con un amigo.",
-    "🥂 Shot con los novios.",
-    "📸 cual es la mesa mas divertida de la fiesta.",
-    "👑 encuentra la persona con mas Aura de la noche.",
-    "🤫 Foto con un pelado."
+    "tirar los pasos prohibidos con un amigo.",
+    "Shot con los novios.",
+    "cual es la mesa mas divertida de la fiesta.",
+    "encuentra la persona con mas Aura de la noche.",
+    "Foto con un pelado."
   ];
 
   const iniciarJuegoReto = () => {
