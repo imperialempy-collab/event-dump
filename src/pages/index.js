@@ -501,7 +501,7 @@ const [retoFase, setRetoFase] = useState('idle'); // 'idle' | 'countdown' | 'rev
               }`}
             >
               <Heart className="w-4 h-4" />
-              <span>2. Tinder Interno (Match)</span>
+              <span>2. BlinkCrush (Match)</span>
             </button>
 
             <button
