@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import {
@@ -27,6 +27,51 @@ import {
   Share2
 } from 'lucide-react';
 
+const PARTICULAS_TV = [
+  { id: 1, left: '6%', dur: '14s', delay: '-2s', size: '3px', opacity: 0.5 },
+  { id: 2, left: '14%', dur: '19s', delay: '-8s', size: '4px', opacity: 0.7 },
+  { id: 3, left: '22%', dur: '12s', delay: '-4s', size: '2px', opacity: 0.4 },
+  { id: 4, left: '31%', dur: '22s', delay: '-11s', size: '5px', opacity: 0.6 },
+  { id: 5, left: '39%', dur: '16s', delay: '-6s', size: '3px', opacity: 0.5 },
+  { id: 6, left: '47%', dur: '25s', delay: '-15s', size: '4px', opacity: 0.7 },
+  { id: 7, left: '54%', dur: '13s', delay: '-1s', size: '2px', opacity: 0.4 },
+  { id: 8, left: '62%', dur: '18s', delay: '-9s', size: '5px', opacity: 0.6 },
+  { id: 9, left: '70%', dur: '15s', delay: '-5s', size: '3px', opacity: 0.5 },
+  { id: 10, left: '78%', dur: '21s', delay: '-13s', size: '4px', opacity: 0.7 },
+  { id: 11, left: '86%', dur: '14s', delay: '-3s', size: '3px', opacity: 0.5 },
+  { id: 12, left: '93%', dur: '20s', delay: '-10s', size: '4px', opacity: 0.6 },
+  { id: 13, left: '18%', dur: '17s', delay: '-14s', size: '3px', opacity: 0.4 },
+  { id: 14, left: '66%', dur: '23s', delay: '-7s', size: '3px', opacity: 0.5 }
+];
+
+const ParticulasFondoDemo = () => (
+  <div className="absolute inset-0 overflow-hidden pointer-events-none z-0" style={{ transform: 'translateZ(0)' }}>
+    {PARTICULAS_TV.map((p) => (
+      <div
+        key={p.id}
+        className="absolute bg-white rounded-full shadow-[0_0_8px_rgba(255,255,255,0.8)]"
+        style={{
+          left: p.left,
+          width: p.size,
+          height: p.size,
+          bottom: '-10px',
+          opacity: p.opacity,
+          animation: `floatUpDemo ${p.dur} linear infinite`,
+          animationDelay: p.delay
+        }}
+      />
+    ))}
+    <style>{`
+      @keyframes floatUpDemo {
+        0% { transform: translateY(0) scale(0.5); opacity: 0; }
+        10% { opacity: 1; }
+        90% { opacity: 1; }
+        100% { transform: translateY(-450px) scale(1.4); opacity: 0; }
+      }
+    `}</style>
+  </div>
+);
+
 export default function LandingPage() {
   const router = useRouter();
   
@@ -35,7 +80,30 @@ export default function LandingPage() {
   const [likedTinder, setLikedTinder] = useState(false);
   const [showMatch, setShowMatch] = useState(false);
   const [currentChallenge, setCurrentChallenge] = useState(0);
+  const [tvIndex, setTvIndex] = useState(0);
 
+  const tvDemoItems = [
+    { id: 1, tipo: 'imagen', url: '/demo1.png', likes: 24, comentarios: 5 },
+    { id: 2, tipo: 'imagen', url: '/demo2.png', likes: 38, comentarios: 9 },
+    { id: 3, tipo: 'video', url: '/demo3.mp4', likes: 52, comentarios: 14 },
+    { id: 4, tipo: 'imagen', url: '/demo4.jpeg', likes: 31, comentarios: 7 }
+  ];
+
+  const currentTvItem = tvDemoItems[tvIndex];
+
+  const nextTvSlide = () => {
+    setTvIndex((prev) => (prev + 1) % tvDemoItems.length);
+  };
+
+  useEffect(() => {
+    if (activeTab !== 'live') return;
+    const tiempoLimite = currentTvItem.tipo === 'video' ? 20000 : 4000;
+    const timer = setTimeout(() => {
+      nextTvSlide();
+    }, tiempoLimite);
+    return () => clearTimeout(timer);
+  }, [tvIndex, activeTab, currentTvItem.tipo]);
+  
   // Challenges generator
   const challenges = [
     "🔥 tirar los pasos prohibidos con un amigo.",
@@ -397,49 +465,97 @@ export default function LandingPage() {
           {/* DEMO DISPLAY DISPLAY BOX */}
           <div className="bg-[#0B0D19] border border-slate-700/80 rounded-3xl p-6 md:p-10 shadow-2xl relative overflow-hidden">
             
-            {/* 1. LIVE STREAM DEMO */}
+    {/* 1. LIVE STREAM DEMO */}
             {activeTab === 'live' && (
               <div className="grid md:grid-cols-3 gap-8 items-center animate-in fade-in duration-300">
-                <div className="md:col-span-2 bg-slate-950 p-4 md:p-6 rounded-2xl border border-slate-800 relative shadow-inner">
+                <div className="md:col-span-2 flex flex-col gap-2.5">
                   
-                  {/* Simulated TV Frame */}
-                  <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-800 text-xs text-slate-400 font-mono">
+                  {/* Marco Superior TV */}
+                  <div className="flex items-center justify-between px-1 text-xs text-slate-400 font-mono">
                     <span className="flex items-center gap-2">
                       <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping" />
-                      <strong>EVENT-DUMP LIVE TV</strong> — Boda Maria & Lucas
+                      <strong className="text-white">EVENT-DUMP LIVE TV</strong>
                     </span>
-                    <span className="bg-slate-800 px-2 py-0.5 rounded text-[10px]">PANTALLA GIGANTE</span>
+                    <button
+                      onClick={nextTvSlide}
+                      className="bg-slate-800/90 hover:bg-slate-700 text-slate-200 px-2.5 py-1 rounded-lg text-[10px] font-sans font-bold tracking-wider uppercase transition-colors"
+                    >
+                      Siguiente ⏭
+                    </button>
                   </div>
 
-                  {/* Photo Stream Simulation */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-slate-900 rounded-xl overflow-hidden relative border border-slate-800 group">
-                      <div className="h-44 md:h-52 bg-gradient-to-br from-pink-600/30 to-purple-800/40 flex flex-col items-center justify-center p-4 text-center">
-                        <Camera className="w-10 h-10 text-pink-400 mb-2" />
-                        <span className="text-xs text-slate-300 font-bold">"El tío bailando 3:00 AM"</span>
-                        <span className="text-[10px] text-pink-400 mt-1">Subido por Mesa 4</span>
+                  {/* Pantalla Gigante Real 16:9 */}
+                  <div className="relative w-full aspect-video bg-black rounded-2xl border border-slate-800 overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.8)] select-none">
+                    <ParticulasFondoDemo />
+
+                    {/* Contenido Centrado (Foto o Video) */}
+                    <div
+                      key={`tv-slide-${currentTvItem.id}`}
+                      className="absolute inset-0 w-full h-full flex items-center justify-center p-4 sm:p-7 z-10 animate-in fade-in duration-500"
+                      style={{ transform: 'translateZ(0)' }}
+                    >
+                      {currentTvItem.tipo === 'video' ? (
+                        <video
+                          src={currentTvItem.url}
+                          autoPlay
+                          muted
+                          playsInline
+                          preload="auto"
+                          onEnded={nextTvSlide}
+                          onError={nextTvSlide}
+                          className="w-full h-full object-contain drop-shadow-[0_15px_35px_rgba(0,0,0,0.85)] rounded-xl sm:rounded-2xl border border-white/10"
+                        />
+                      ) : (
+                        <img
+                          src={currentTvItem.url}
+                          alt="Transmisión en vivo Event-Dump"
+                          className="w-full h-full object-contain drop-shadow-[0_15px_35px_rgba(0,0,0,0.85)] rounded-xl sm:rounded-2xl border border-white/10"
+                        />
+                      )}
+                    </div>
+
+                    {/* Cartel QR Flotante (Abajo Izquierda, igual que en pantalla.js) */}
+                    <div className="hidden sm:flex absolute bottom-3 left-3 z-20 bg-white p-2 rounded-2xl shadow-2xl flex-col items-center gap-1">
+                      <QrCode className="w-10 h-10 md:w-12 md:h-12 text-black" />
+                      <p className="text-black font-black uppercase tracking-wider text-center text-[7px] leading-tight">
+                        ESCANEA PARA<br />
+                        <span className="text-blue-600">SUBIR FOTOS</span>
+                      </p>
+                    </div>
+
+                    {/* Cápsula de Comentarios y Likes (Abajo Derecha, igual que en pantalla.js) */}
+                    <div className="absolute bottom-3 right-3 z-20 flex items-center gap-2.5 bg-black/50 backdrop-blur-xl px-3.5 py-1.5 rounded-full border border-white/15 shadow-xl">
+                      <div className="flex items-center gap-1.5">
+                        <MessageCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white/90" />
+                        <span className="text-white font-bold text-xs sm:text-sm">{currentTvItem.comentarios}</span>
+                      </div>
+                      <div className="w-px h-3.5 bg-white/20" />
+                      <div className="flex items-center gap-1.5">
+                        <Heart className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-red-500 fill-red-500" />
+                        <span className="text-white font-bold text-xs sm:text-sm">{currentTvItem.likes}</span>
                       </div>
                     </div>
 
-                    <div className="bg-slate-900 rounded-xl overflow-hidden relative border border-slate-800">
-                      <div className="h-44 md:h-52 bg-gradient-to-br from-orange-500/30 to-pink-700/40 flex flex-col items-center justify-center p-4 text-center">
-                        <PartyPopper className="w-10 h-10 text-orange-400 mb-2" />
-                        <span className="text-xs text-slate-300 font-bold">"Brindis con los pibes"</span>
-                        <span className="text-[10px] text-orange-400 mt-1">Subido por @Santi</span>
-                      </div>
+                    {/* Indicadores de progreso abajo al centro */}
+                    <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5">
+                      {tvDemoItems.map((item, idx) => (
+                        <button
+                          key={item.id}
+                          onClick={() => setTvIndex(idx)}
+                          aria-label={`Ver diapositiva ${idx + 1}`}
+                          className={`h-1 rounded-full transition-all ${
+                            idx === tvIndex ? 'w-5 bg-pink-500' : 'w-1.5 bg-white/30 hover:bg-white/60'
+                          }`}
+                        />
+                      ))}
                     </div>
-                  </div>
-
-                  <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
-                    <span>⚡ Actualización en tiempo real</span>
-                    <span className="text-pink-400 font-semibold">142 fotos subidas esta noche</span>
                   </div>
                 </div>
 
                 <div className="space-y-4">
                   <h3 className="text-2xl font-bold text-white">Transmisión en Vivo a la Pantalla del Evento</h3>
                   <p className="text-slate-400 text-sm leading-relaxed">
-                    Conecta una laptop al proyector o TV del local. Cada foto que suban los invitados aparecerá al instante con un diseño moderno de fiesta.
+                    Conecta una laptop al proyector o TV del local. Cada foto o video que suban los invitados aparecerá al instante con un diseño moderno de fiesta.
                   </p>
                   <ul className="space-y-2 text-xs font-semibold text-slate-300">
                     <li className="flex items-center gap-2 text-pink-400">
