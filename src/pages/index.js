@@ -45,11 +45,6 @@ export default function LandingPage() {
     "🤫 Foto con un pelado."
   ];
 
-  // Calculadora de recuerdos estimados
-  const estimatedPhotos = Math.floor(guestCount * 6.5);
-  const estimatedMatches = Math.floor(guestCount * 0.22);
-  const estimatedChallenges = Math.floor(guestCount * 1.4);
-
   const nextChallenge = () => {
     setCurrentChallenge((prev) => (prev + 1) % challenges.length);
   };
