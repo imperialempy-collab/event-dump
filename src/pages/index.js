@@ -913,7 +913,7 @@ const [retoFase, setRetoFase] = useState('idle'); // 'idle' | 'countdown' | 'rev
             <ul className="space-y-3 text-sm text-slate-200 mb-8 border-t border-b border-slate-800 py-6">
               <li className="flex items-center gap-3">
                 <CheckCircle2 className="w-5 h-5 text-pink-400 shrink-0" />
-                <span><strong>Fotos & Videos ilimitados</strong> sin compresión</span>
+                <span><strong>Fotos & Videos cortos ilimitados</strong>.</span>
               </li>
               <li className="flex items-center gap-3">
                 <CheckCircle2 className="w-5 h-5 text-pink-400 shrink-0" />
@@ -925,7 +925,7 @@ const [retoFase, setRetoFase] = useState('idle'); // 'idle' | 'countdown' | 'rev
               </li>
               <li className="flex items-center gap-3">
                 <CheckCircle2 className="w-5 h-5 text-pink-400 shrink-0" />
-                <span><strong>Tinder Interno</strong> (Match secreto entre invitados)</span>
+                <span><strong>BlinkCrush interno</strong> (Match secreto entre invitados)</span>
               </li>
               <li className="flex items-center gap-3">
                 <CheckCircle2 className="w-5 h-5 text-pink-400 shrink-0" />
@@ -933,7 +933,7 @@ const [retoFase, setRetoFase] = useState('idle'); // 'idle' | 'countdown' | 'rev
               </li>
               <li className="flex items-center gap-3">
                 <CheckCircle2 className="w-5 h-5 text-pink-400 shrink-0" />
-                <span><strong>Descarga ZIP HD</strong> de todas las fotos post-evento</span>
+                <span><strong>Descarga ZIP</strong> de todas las fotos post-evento</span>
               </li>
             </ul>
 
@@ -946,7 +946,7 @@ const [retoFase, setRetoFase] = useState('idle'); // 'idle' | 'countdown' | 'rev
 
             <p className="text-[11px] text-center text-slate-400 mt-4">
               ¿Eres dueño de boliche o salón de eventos? <br/>
-              <a href="https://wa.me/595900000000" target="_blank" className="text-pink-400 font-bold underline">Consulta planes mensuales especiales</a>
+              <a href="https://wa.me/+595992049430" target="_blank" className="text-pink-400 font-bold underline">Consulta planes mensuales especiales</a>
             </p>
 
           </div>
@@ -1018,7 +1018,7 @@ const [retoFase, setRetoFase] = useState('idle'); // 'idle' | 'countdown' | 'rev
           <div className="flex gap-6">
             <a href="#" className="hover:text-slate-300">Términos</a>
             <a href="#" className="hover:text-slate-300">Privacidad</a>
-            <a href="https://wa.me/595900000000" target="_blank" rel="noreferrer" className="hover:text-slate-300">WhatsApp Soporte</a>
+            <a href="https://wa.me/+595992049430" target="_blank" rel="noreferrer" className="hover:text-slate-300">WhatsApp Soporte</a>
           </div>
         </div>
       </footer>
